@@ -1,8 +1,8 @@
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: apiserver/Dockerfile
     container_name: task-wizard
     restart: unless-stopped
     volumes:

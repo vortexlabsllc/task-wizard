@@ -17,8 +17,8 @@ if (localPropertiesFile.exists()) {
 }
 
 fun calculateVersion(): Pair<Int, String> {
-    val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-    val runAttempt = System.getenv("GITHUB_RUN_ATTEMPT")?.toIntOrNull() ?: 1
+    val runNumber = System.getenv("CI_BUILD_NUMBER")?.toIntOrNull() ?: 1
+    val runAttempt = System.getenv("CI_BUILD_ATTEMPT")?.toIntOrNull() ?: 1
 
     val today = LocalDate.now()
     val dateFormat = DateTimeFormatter.ofPattern("yyMMdd")
