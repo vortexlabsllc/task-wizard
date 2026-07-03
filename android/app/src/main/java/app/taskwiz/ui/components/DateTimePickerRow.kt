@@ -46,8 +46,15 @@ fun DateTimePickerRow(
     var pendingDate by remember { mutableStateOf<ZonedDateTime?>(null) }
 
     val datePickerState = rememberDatePickerState(
+        // Material3's DatePicker treats selectedDateMillis as UTC midnight of a calendar
+        // day, so seed it with the local calendar date's UTC midnight. Passing the raw
+        // instant would roll the displayed day forward in negative-offset zones (e.g. an
+        // evening in Seattle is already the next day in UTC).
         initialSelectedDateMillis = (value ?: ZonedDateTime.now(ZoneId.systemDefault()))
-            .toInstant().toEpochMilli()
+            .toLocalDate()
+            .atStartOfDay(ZoneOffset.UTC)
+            .toInstant()
+            .toEpochMilli()
     )
     val timePickerState = rememberTimePickerState(
         initialHour = value?.hour ?: ZonedDateTime.now(ZoneId.systemDefault()).hour,
