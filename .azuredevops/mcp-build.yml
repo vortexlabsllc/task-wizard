@@ -32,7 +32,7 @@ extends:
       templateContext:
         intent: build
       jobs:
-      - job: app
+      - job: test
         templateContext:
           dotnet:
           - name: mcp
@@ -40,3 +40,18 @@ extends:
             projects: mcpserver/**/*.csproj
             configuration: Release
             test: false
+    # No approval gate — continuous deploy.
+    - stage: push_canary
+      templateContext:
+        intent: build
+      jobs:
+      - job: image
+        condition: ne(variables['Build.Reason'], 'PullRequest')
+        templateContext:
+          containerImage:
+          - name: mcp
+            repository: task-wizard-mcp
+            dockerfile: mcpserver/Dockerfile
+            context: mcpserver
+            extraTag: canary
+    # No production tier yet — nothing consumes the :release tag today.

@@ -27,16 +27,40 @@ resources:
 extends:
   template: pipeline.yml@templates
   parameters:
+    keyVault: $(KeyVault)
     stages:
     - stage: build
       templateContext:
         intent: build
       jobs:
-      - job: app
+      - job: build
         templateContext:
           android:
-          - name: android
+          - name: app
             jdkVersion: '21'
             workingDirectory: android
-            gradleTasks: assembleDebug
-            sign: false
+            gradleTasks: bundleRelease
+            # CI_BUILD_NUMBER/CI_BUILD_ATTEMPT are injected automatically by
+            # steps/android.yml; build.gradle.kts reads them directly.
+            env:
+              APPINSIGHTS_CONNECTION_STRING: $(AppInsightsConnectionString)
+          publishArtifact:
+          - name: aab
+            path: android/app/build/outputs/bundle/release
+            artifact: aab
+    # No approval gate — continuous deploy to the internal track only.
+    - stage: release_canary
+      templateContext:
+        intent: release
+        environment: canary
+      jobs:
+      - job: play_store
+        templateContext:
+          type: play-store-release
+          # gcp-google-play is the same ADO service connection my-journey uses;
+          # task-wizard has its own GCP project/pool/provider trusting it.
+          serviceConnectionId: 'gcp-google-play'
+          packageName: app.taskwiz
+          track: internal
+          workloadIdentityProvider: 'projects/1037008586878/locations/global/workloadIdentityPools/ado-pool/providers/ado-provider'
+          serviceAccountEmail: 'play-release@task-wizard-490917.iam.gserviceaccount.com'
