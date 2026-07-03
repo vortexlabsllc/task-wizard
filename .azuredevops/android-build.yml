@@ -48,7 +48,9 @@ extends:
           - name: aab
             path: android/app/build/outputs/bundle/release
             artifact: aab
-    # No approval gate — continuous deploy to the internal track only.
+    # No approval gate — continuous deploy to the internal track only. Release-
+    # intent stages auto-skip on PR builds (stages/release.yml in the shared
+    # template), so this never runs during PR validation.
     - stage: release_canary
       templateContext:
         intent: release

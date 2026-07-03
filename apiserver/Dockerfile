@@ -5,7 +5,7 @@ WORKDIR /app/frontend
 
 RUN corepack enable
 
-COPY frontend/package.json frontend/yarn.lock ./
+COPY frontend/package.json frontend/yarn.lock frontend/.yarnrc.yml ./
 RUN yarn install --immutable
 
 COPY frontend/ ./
