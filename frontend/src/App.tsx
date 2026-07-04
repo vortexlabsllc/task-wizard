@@ -126,7 +126,7 @@ class AppImpl extends React.Component<AppProps, AppState> {
   }
 
   async componentDidUpdate(prevProps: AppProps): Promise<void> {
-    if (this.props.pathname === NavigationPaths.Login) {
+    if (this.isPublicRoute()) {
       return
     }
 
