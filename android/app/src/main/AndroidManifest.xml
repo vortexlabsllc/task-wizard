@@ -125,16 +125,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:host="app.taskwiz"
-                    android:path="/Td6Sn1vVl6dRUyqdcjJskmNwtss="
-                    android:scheme="msauth" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:host="app.taskwiz"
-                    android:path="/OQxz/rlBJ5+G501Zg0md55cCrIY="
+                    android:path="/N4VVJq9ucOhMedGhjG1jAQbxVZM="
                     android:scheme="msauth" />
             </intent-filter>
         </activity>
