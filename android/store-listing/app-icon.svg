@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="background" x1="54" y1="32" x2="458" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#176B59"/>
+      <stop offset="1" stop-color="#062D27"/>
+    </linearGradient>
+    <linearGradient id="wand" x1="142" y1="374" x2="361" y2="155" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6F2A92"/>
+      <stop offset=".48" stop-color="#A747BF"/>
+      <stop offset="1" stop-color="#E1A4E9"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="250" y1="120" x2="350" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF2A8"/>
+      <stop offset=".46" stop-color="#FFD363"/>
+      <stop offset="1" stop-color="#F29B30"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D3D8E5"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#021A16" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#background)"/>
+  <circle cx="95" cy="105" r="93" fill="#4CB99D" opacity=".11"/>
+  <circle cx="430" cy="423" r="118" fill="#0A201C" opacity=".2"/>
+  <circle cx="425" cy="94" r="48" fill="#8DE0C7" opacity=".08"/>
+  <g transform="translate(256 256) rotate(-45)" filter="url(#shadow)">
+    <rect x="-120" y="-28" width="240" height="56" fill="url(#wand)"/>
+    <rect x="-128" y="-24" width="12" height="48" fill="#6D267E" opacity=".6"/>
+    <path d="M-151-19H-128V19H-151Q-162 0-151-19Z" fill="url(#silver)"/>
+    <rect x="116" y="-24" width="12" height="48" fill="#EAB7EF" opacity=".55"/>
+    <path d="M128-19H151Q162 0 151 19H128Z" fill="url(#silver)"/>
+  </g>
+  <g fill="url(#gold)" filter="url(#shadow)">
+    <path d="M390 55c5 25 15 35 40 40-25 5-35 15-40 40-5-25-15-35-40-40 25-5 35-15 40-40Z"/>
+    <path d="M399 223c4 22 13 31 35 35-22 4-31 13-35 35-4-22-13-31-35-35 22-4 31-13 35-35Z"/>
+    <path d="M242 126c4 20 12 28 32 32-20 4-28 12-32 32-4-20-12-28-32-32 20-4 28-12 32-32Z"/>
+    <circle cx="300" cy="112" r="12"/>
+    <circle cx="407" cy="171" r="11"/>
+    <circle cx="294" cy="230" r="10"/>
+  </g>
+</svg>
