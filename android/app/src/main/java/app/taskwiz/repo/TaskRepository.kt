@@ -68,6 +68,11 @@ class TaskRepository @Inject constructor(
         }
     }
 
+    suspend fun forceRefreshTasks(): Result<List<Task>> {
+        if (!authManager.isSignedIn()) return Result.success(tasks.value)
+        return syncCoordinator.forceSyncOnceBlocking().map { tasks.value }
+    }
+
     suspend fun getActivity(beforeId: Int = 0, limit: Int = 20): Result<List<ActivityEntry>> {
         if (!authManager.isSignedIn()) {
             return Result.success(emptyList())
@@ -321,4 +326,3 @@ class TaskRepository @Inject constructor(
 }
 
 class RevertConflictException : Exception("This action can no longer be reverted")
-

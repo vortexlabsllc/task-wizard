@@ -41,6 +41,18 @@ class LabelViewModel @Inject constructor(
         }
     }
 
+    fun forceRefreshLabels() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            labelRepository.forceRefreshLabels()
+                .onFailure {
+                    telemetryManager.logError(TAG, "Failed to force refresh labels: ${it.message}", it)
+                    _error.value = it.message
+                }
+            _isRefreshing.value = false
+        }
+    }
+
     fun createLabel(name: String, color: String) {
         viewModelScope.launch {
             labelRepository.createLabel(CreateLabelReq(name, color))

@@ -59,6 +59,11 @@ class LabelRepository @Inject constructor(
         }
     }
 
+    suspend fun forceRefreshLabels(): Result<List<Label>> {
+        if (!authManager.isSignedIn()) return Result.success(labels.value)
+        return syncCoordinator.forceSyncOnceBlocking().map { labels.value }
+    }
+
     suspend fun createLabel(req: CreateLabelReq): Result<Int> {
         return try {
             val localId = UUID.randomUUID().toString()
@@ -158,4 +163,3 @@ class LabelRepository @Inject constructor(
         private const val TAG = "LabelRepository"
     }
 }
-
