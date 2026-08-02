@@ -22,6 +22,7 @@ import app.taskwiz.model.UpdateDueDateReq
 import app.taskwiz.model.UpdateLabelReq
 import app.taskwiz.model.UpdateTaskReq
 import app.taskwiz.telemetry.TelemetryManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -97,15 +99,17 @@ class SyncCoordinator @Inject constructor(
         return success
     }
 
-    suspend fun forceSyncOnceBlocking(): Result<Unit> {
+    suspend fun forceSyncOnceBlocking(): Result<Unit> = withContext(Dispatchers.IO) {
         if (!authManager.isSignedIn()) {
-            return Result.failure(IllegalStateException("Cannot refresh while signed out"))
+            return@withContext Result.failure(IllegalStateException("Cannot refresh while signed out"))
         }
-        return mutex.withLock {
+        mutex.withLock {
             try {
                 flushOutbox()
                 refreshAll(requireSuccessfulFetch = true)
                 Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 telemetryManager.logError(TAG, "Forced refresh failed: ${e.message}", e)
                 Result.failure(e)
