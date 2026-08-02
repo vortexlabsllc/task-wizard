@@ -197,7 +197,7 @@ fun AppNavigation(
                     taskGroups = taskGroups,
                     expandedGroups = expandedGroups,
                     isRefreshing = isRefreshing,
-                    onRefresh = { viewModel.refreshTasks() },
+                    onRefresh = { viewModel.forceRefreshTasks() },
                     onCompleteTask = { viewModel.completeTask(it) },
                     onSkipTask = { viewModel.skipTask(it) },
                     onDeleteTask = { viewModel.deleteTask(it) },
@@ -252,7 +252,7 @@ fun AppNavigation(
                 LabelsScreen(
                     labels = labels,
                     isRefreshing = isRefreshing,
-                    onRefresh = { viewModel.refreshLabels() },
+                    onRefresh = { viewModel.forceRefreshLabels() },
                     onCreateLabel = { name, color -> viewModel.createLabel(name, color) },
                     onUpdateLabel = { id, name, color -> viewModel.updateLabel(id, name, color) },
                     onDeleteLabel = { viewModel.deleteLabel(it) }

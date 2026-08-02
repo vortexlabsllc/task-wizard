@@ -140,6 +140,17 @@ class TaskListViewModel @Inject constructor(
         }
     }
 
+    fun forceRefreshTasks() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            taskRepository.forceRefreshTasks().onFailure {
+                telemetryManager.logError(TAG, "Failed to force refresh tasks: ${it.message}", it)
+                _error.value = it.message
+            }
+            _isRefreshing.value = false
+        }
+    }
+
     fun completeTask(id: Int, endRecurrence: Boolean = false) {
         viewModelScope.launch {
             taskRepository.completeTask(id, endRecurrence)

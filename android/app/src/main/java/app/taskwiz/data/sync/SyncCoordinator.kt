@@ -22,6 +22,7 @@ import app.taskwiz.model.UpdateDueDateReq
 import app.taskwiz.model.UpdateLabelReq
 import app.taskwiz.model.UpdateTaskReq
 import app.taskwiz.telemetry.TelemetryManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -95,6 +97,24 @@ class SyncCoordinator @Inject constructor(
         activeFullJob = job
         job.join()
         return success
+    }
+
+    suspend fun forceSyncOnceBlocking(): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!authManager.isSignedIn()) {
+            return@withContext Result.failure(IllegalStateException("Cannot refresh while signed out"))
+        }
+        mutex.withLock {
+            try {
+                flushOutbox()
+                refreshAll(requireSuccessfulFetch = true)
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                telemetryManager.logError(TAG, "Forced refresh failed: ${e.message}", e)
+                Result.failure(e)
+            }
+        }
     }
 
     /**
@@ -362,9 +382,9 @@ class SyncCoordinator @Inject constructor(
         telemetryManager.logWarning(TAG, "Outbox op ${op.opType} ${op.entityType} id=${op.id}: $message")
     }
 
-    private suspend fun refreshAll() {
-        val labels = fetchLabelsForRefresh()
-        val tasks = fetchTasksForRefresh()
+    private suspend fun refreshAll(requireSuccessfulFetch: Boolean = false) {
+        val labels = fetchLabelsForRefresh(requireSuccessfulFetch)
+        val tasks = fetchTasksForRefresh(requireSuccessfulFetch)
         if (labels == null && tasks == null) return
         db.withTransaction {
             labels?.let { applyLabelsToDb(it) }
@@ -372,10 +392,12 @@ class SyncCoordinator @Inject constructor(
         }
     }
 
-    private suspend fun fetchTasksForRefresh(): List<TaskRefreshPayload>? {
+    private suspend fun fetchTasksForRefresh(requireSuccessfulFetch: Boolean = false): List<TaskRefreshPayload>? {
         val response = api.getTasks()
         if (!response.isSuccessful) {
-            telemetryManager.logWarning(TAG, "Refresh tasks failed: HTTP ${response.code()}")
+            val message = "Refresh tasks failed: HTTP ${response.code()}"
+            telemetryManager.logWarning(TAG, message)
+            if (requireSuccessfulFetch) throw IllegalStateException(message)
             return null
         }
         return response.body()?.tasks?.map { task ->
@@ -401,10 +423,12 @@ class SyncCoordinator @Inject constructor(
         }
     }
 
-    private suspend fun fetchLabelsForRefresh(): List<LabelEntity>? {
+    private suspend fun fetchLabelsForRefresh(requireSuccessfulFetch: Boolean = false): List<LabelEntity>? {
         val response = api.getLabels()
         if (!response.isSuccessful) {
-            telemetryManager.logWarning(TAG, "Refresh labels failed: HTTP ${response.code()}")
+            val message = "Refresh labels failed: HTTP ${response.code()}"
+            telemetryManager.logWarning(TAG, message)
+            if (requireSuccessfulFetch) throw IllegalStateException(message)
             return null
         }
         return response.body()?.labels?.map { label ->
