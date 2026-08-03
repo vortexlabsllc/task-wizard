@@ -4,6 +4,7 @@ database:
   path: /config/task-wizard.db
 entra:
   enabled: false
+  # Omit tenant_id to allow all Entra tenants and personal Microsoft accounts.
   tenant_id: ""
   client_id: ""
   audience: ""

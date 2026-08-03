@@ -21,6 +21,7 @@ import (
 )
 
 const SessionCookieName = "tw_session"
+const entraLoginURL = "https://login.microsoftonline.com/"
 
 // clockSkewLeeway tolerates small clock differences between the identity
 // provider and this server when validating time-based token claims.
@@ -31,8 +32,8 @@ type AuthMiddleware struct {
 	keySet      oidc.KeySet
 	issuer      string
 	audience    string
-	tenantID    string
 	clientID    string
+	multiTenant bool
 	userRepo    uRepo.IUserRepo
 	sessionRepo sRepo.ISessionRepo
 }
@@ -77,14 +78,14 @@ func NewAuthMiddleware(cfg *config.Config, userRepo uRepo.IUserRepo, sessionRepo
 		return m, nil
 	}
 
-	issuer := cfg.Entra.Issuer
+	issuer := strings.TrimSpace(cfg.Entra.Issuer)
 	if issuer == "" {
-		issuer = "https://login.microsoftonline.com/" + cfg.Entra.TenantID + "/v2.0"
+		issuer = entraLoginURL + cfg.Entra.AuthorityTenantID() + "/v2.0"
 	}
 	m.issuer = issuer
 	m.audience = cfg.Entra.Audience
-	m.tenantID = cfg.Entra.TenantID
 	m.clientID = cfg.Entra.ClientID
+	m.multiTenant = strings.TrimSpace(cfg.Entra.TenantID) == "" && strings.TrimSpace(cfg.Entra.Issuer) == ""
 
 	provider, err := oidc.NewProvider(context.Background(), issuer)
 	if err != nil {
@@ -160,7 +161,7 @@ func (m *AuthMiddleware) verifyAccessToken(ctx context.Context, rawToken string)
 		return nil, fmt.Errorf("failed to parse token claims: %s", err.Error())
 	}
 
-	if claims.Issuer != m.issuer {
+	if !m.validIssuer(claims) {
 		return nil, fmt.Errorf("invalid token issuer")
 	}
 
@@ -187,6 +188,14 @@ func (m *AuthMiddleware) verifyAccessToken(ctx context.Context, rawToken string)
 		Scopes:          models.AllUserScopes(),
 		PendingDeletion: user.DeletionRequestedAt != nil,
 	}, nil
+}
+
+func (m *AuthMiddleware) validIssuer(claims accessTokenClaims) bool {
+	if !m.multiTenant {
+		return claims.Issuer == m.issuer
+	}
+
+	return claims.Issuer == entraLoginURL+claims.TenantID+"/v2.0"
 }
 
 func (m *AuthMiddleware) authenticateSession(ctx context.Context, rawToken string) (*models.SignedInIdentity, error) {

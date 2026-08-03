@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol;
@@ -13,9 +14,9 @@ var tenantId = Environment.GetEnvironmentVariable("TW_ENTRA_TENANT_ID") ?? "";
 var audience = Environment.GetEnvironmentVariable("TW_ENTRA_AUDIENCE") ?? "";
 var clientId = Environment.GetEnvironmentVariable("TW_ENTRA_CLIENT_ID") ?? "";
 var mcpResource = Environment.GetEnvironmentVariable("TW_MCP_RESOURCE") ?? "";
-
-if (string.IsNullOrWhiteSpace(tenantId))
-    throw new InvalidOperationException("TW_ENTRA_TENANT_ID must be set to a valid Entra tenant ID.");
+var configuredIssuer = Environment.GetEnvironmentVariable("TW_ENTRA_ISSUER");
+if (string.IsNullOrWhiteSpace(configuredIssuer))
+    configuredIssuer = null;
 
 if (string.IsNullOrWhiteSpace(audience))
     throw new InvalidOperationException("TW_ENTRA_AUDIENCE must be set to a valid Entra audience.");
@@ -26,8 +27,10 @@ if (string.IsNullOrWhiteSpace(clientId))
 if (string.IsNullOrWhiteSpace(mcpResource))
     throw new InvalidOperationException("TW_MCP_RESOURCE must be set to the canonical URL of this MCP server (e.g. https://mcp.example.com).");
 
-var authority = Environment.GetEnvironmentVariable("TW_ENTRA_ISSUER")
-    ?? $"https://login.microsoftonline.com/{tenantId}/v2.0";
+var multiTenant = string.IsNullOrWhiteSpace(tenantId) && string.IsNullOrWhiteSpace(configuredIssuer);
+var authorityTenant = string.IsNullOrWhiteSpace(tenantId) ? "common" : tenantId.Trim();
+var authority = configuredIssuer
+    ?? $"https://login.microsoftonline.com/{authorityTenant}/v2.0";
 var apiUrl = Environment.GetEnvironmentVariable("TW_API_URL") ?? "http://localhost:2021";
 
 builder.Services.AddHttpContextAccessor();
@@ -54,7 +57,7 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         ValidAudiences = new[] { audience, clientId },
-        ValidIssuer = authority,
+        IssuerValidator = (issuer, securityToken, _) => ValidateIssuer(issuer, securityToken, authority, multiTenant),
     };
 })
 .AddMcp(options =>
@@ -133,3 +136,24 @@ app.UseAuthorization();
 app.MapMcp().RequireAuthorization();
 
 app.Run();
+
+static string ValidateIssuer(string issuer, SecurityToken securityToken, string authority, bool multiTenant)
+{
+    if (!multiTenant)
+    {
+        if (issuer == authority)
+            return issuer;
+
+        throw new SecurityTokenInvalidIssuerException("Invalid token issuer.");
+    }
+
+    if (securityToken is not JwtSecurityToken jwt)
+        throw new SecurityTokenInvalidIssuerException("Invalid token issuer.");
+
+    var tenantId = jwt.Claims.FirstOrDefault(claim => claim.Type == "tid")?.Value;
+    var expectedIssuer = $"https://login.microsoftonline.com/{tenantId}/v2.0";
+    if (string.IsNullOrWhiteSpace(tenantId) || issuer != expectedIssuer)
+        throw new SecurityTokenInvalidIssuerException("Invalid token issuer.");
+
+    return issuer;
+}

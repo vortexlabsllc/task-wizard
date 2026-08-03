@@ -36,6 +36,15 @@ type EntraConfig struct {
 	Issuer   string `mapstructure:"issuer" yaml:"issuer"`
 }
 
+func (c EntraConfig) AuthorityTenantID() string {
+	tenantID := strings.TrimSpace(c.TenantID)
+	if tenantID == "" {
+		return "common"
+	}
+
+	return tenantID
+}
+
 type ServerConfig struct {
 	HostName             string        `mapstructure:"host_name" yaml:"host_name"`
 	Port                 int           `mapstructure:"port" yaml:"port"`
