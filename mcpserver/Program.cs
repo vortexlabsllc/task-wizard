@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol;
 using ModelContextProtocol.AspNetCore;
@@ -14,7 +15,7 @@ var tenantId = Environment.GetEnvironmentVariable("TW_ENTRA_TENANT_ID") ?? "";
 var audience = Environment.GetEnvironmentVariable("TW_ENTRA_AUDIENCE") ?? "";
 var clientId = Environment.GetEnvironmentVariable("TW_ENTRA_CLIENT_ID") ?? "";
 var mcpResource = Environment.GetEnvironmentVariable("TW_MCP_RESOURCE") ?? "";
-var configuredIssuer = Environment.GetEnvironmentVariable("TW_ENTRA_ISSUER");
+var configuredIssuer = Environment.GetEnvironmentVariable("TW_ENTRA_ISSUER")?.Trim();
 if (string.IsNullOrWhiteSpace(configuredIssuer))
     configuredIssuer = null;
 
@@ -147,10 +148,12 @@ static string ValidateIssuer(string issuer, SecurityToken securityToken, string 
         throw new SecurityTokenInvalidIssuerException("Invalid token issuer.");
     }
 
-    if (securityToken is not JwtSecurityToken jwt)
-        throw new SecurityTokenInvalidIssuerException("Invalid token issuer.");
-
-    var tenantId = jwt.Claims.FirstOrDefault(claim => claim.Type == "tid")?.Value;
+    var tenantId = securityToken switch
+    {
+        JwtSecurityToken jwt => jwt.Claims.FirstOrDefault(claim => claim.Type == "tid")?.Value,
+        JsonWebToken jsonWebToken => jsonWebToken.GetClaim("tid")?.Value,
+        _ => null,
+    };
     var expectedIssuer = $"https://login.microsoftonline.com/{tenantId}/v2.0";
     if (string.IsNullOrWhiteSpace(tenantId) || issuer != expectedIssuer)
         throw new SecurityTokenInvalidIssuerException("Invalid token issuer.");

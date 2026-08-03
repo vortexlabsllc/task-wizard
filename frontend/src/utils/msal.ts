@@ -67,6 +67,11 @@ const ensureActiveAccount = (pca: IPublicClientApplication): AccountInfo => {
     if (activeAccount) {
       return activeAccount
     }
+    const accounts = pca.getAllAccounts()
+    if (accounts.length === 1) {
+      pca.setActiveAccount(accounts[0])
+      return accounts[0]
+    }
     throw new Error('No active account selected')
   }
 

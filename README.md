@@ -50,7 +50,7 @@ To set up authentication:
 1. Register an application in Microsoft Entra ID. To allow every Entra tenant and personal Microsoft accounts, select **Accounts in any organizational directory and personal Microsoft accounts**.
 2. Configure `entra.client_id` and `entra.audience` in `config.yaml` (or via `TW_ENTRA_*` environment variables). Set `entra.tenant_id` to restrict sign-in to one tenant, or omit it to use the `common` authority for every Entra tenant and personal Microsoft accounts.
 3. Set `entra.enabled` to `true`
-4. Register the web application's `/login` redirect URI and the Android app's `msauth://` redirect URI in the app registration.
+4. Register the web application's `/login` redirect URI and Android's `msauth://<package-name>/<url-encoded-base64-SHA1-signing-certificate-hash>` redirect URI in the app registration. The Android app computes this value in `AuthManager.computeRedirectUri()`.
 
 For development without Azure AD, set `entra.enabled` to `false` to enable dev bypass mode (all requests are treated as authenticated).
 

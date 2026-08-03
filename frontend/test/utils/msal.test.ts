@@ -117,5 +117,28 @@ describe('msal utils', () => {
       await expect(module.acquireAccessToken()).resolves.toBe('access-token')
       expect(mockPca.setActiveAccount).not.toHaveBeenCalled()
     })
+
+    it('selects the only cached account for an optional tenant', async () => {
+      jest.doMock('@/api/auth', () => ({
+        GetAuthConfig: jest.fn().mockResolvedValue({
+          enabled: true,
+          client_id: 'client-id',
+          tenant_id: '',
+          audience: 'https://audience',
+        }),
+      }))
+      jest.resetModules()
+
+      const module = await import('@/utils/msal')
+      await module.initializeMsal()
+      mockPca.getAllAccounts.mockReturnValue([otherAccount])
+      mockPca.acquireTokenSilent.mockResolvedValue({
+        ...authResult,
+        account: otherAccount,
+      })
+
+      await expect(module.acquireAccessToken()).resolves.toBe('access-token')
+      expect(mockPca.setActiveAccount).toHaveBeenCalledWith(otherAccount)
+    })
   })
 })
