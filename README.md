@@ -47,9 +47,10 @@ Task Wizard uses [Microsoft Entra ID](https://www.microsoft.com/en-us/security/b
 
 To set up authentication:
 
-1. Register an application in your Azure AD tenant
-2. Configure `entra.tenant_id`, `entra.client_id`, and `entra.audience` in `config.yaml` (or via `TW_ENTRA_*` environment variables)
+1. Register an application in Microsoft Entra ID. To allow every Entra tenant and personal Microsoft accounts, select **Accounts in any organizational directory and personal Microsoft accounts**.
+2. Configure `entra.client_id` and `entra.audience` in `config.yaml` (or via `TW_ENTRA_*` environment variables). Set `entra.tenant_id` to restrict sign-in to one tenant, or omit it to use the `common` authority for every Entra tenant and personal Microsoft accounts.
 3. Set `entra.enabled` to `true`
+4. Register the web application's `/login` redirect URI and Android's `msauth://<package-name>/<url-encoded-base64-SHA1-signing-certificate-hash>` redirect URI in the app registration. The Android app computes this value in `AuthManager.computeRedirectUri()`.
 
 For development without Azure AD, set `entra.enabled` to `false` to enable dev bypass mode (all requests are treated as authenticated).
 
@@ -147,7 +148,7 @@ You can also use environment variables for database configuration:
 Configure Entra ID authentication with environment variables or `config.yaml`:
 
 - `TW_ENTRA_ENABLED` - Enable Entra ID authentication (true/false)
-- `TW_ENTRA_TENANT_ID` - Azure AD tenant ID
+- `TW_ENTRA_TENANT_ID` - Optional Azure AD tenant ID. When omitted, users from any Entra tenant and personal Microsoft accounts can sign in.
 - `TW_ENTRA_CLIENT_ID` - Azure AD application (client) ID
 - `TW_ENTRA_AUDIENCE` - Expected token audience
 
@@ -167,7 +168,7 @@ The configuration files are yaml mappings with the following values:
 | `database.username`                      | (empty)                                             | Database username (MySQL only).                                             |
 | `database.password`                      | (empty)                                             | Database password (MySQL only).                                             |
 | `entra.enabled`                          | `false`                                             | Enables Microsoft Entra ID (Azure AD) authentication.                       |
-| `entra.tenant_id`                        | (empty)                                             | The Azure AD tenant ID for authentication.                                  |
+| `entra.tenant_id`                        | (empty)                                             | Optional Azure AD tenant ID. Empty uses the `common` authority for all Entra tenants and personal Microsoft accounts. |
 | `entra.client_id`                        | (empty)                                             | The Azure AD application (client) ID.                                       |
 | `entra.audience`                         | (empty)                                             | The expected audience for Entra ID tokens.                                  |
 | `server.host_name`                       | `localhost`                                         | The hostname to use for external links.                                     |

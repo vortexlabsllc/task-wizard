@@ -23,10 +23,11 @@ const doInitializeMsal = async () => {
   authConfig = await GetAuthConfig()
   if (!authConfig.enabled) return
 
+  const tenantId = authConfig.tenant_id.trim()
   pcaPromise = createStandardPublicClientApplication({
     auth: {
       clientId: authConfig.client_id,
-      authority: `https://login.microsoftonline.com/${authConfig.tenant_id}`,
+      authority: `https://login.microsoftonline.com/${tenantId || 'common'}`,
       redirectUri: `${window.location.origin}/login`,
     },
     cache: {
@@ -61,11 +62,24 @@ const ensureActiveAccount = (pca: IPublicClientApplication): AccountInfo => {
   }
 
   const activeAccount = pca.getActiveAccount()
-  if (activeAccount?.tenantId === authConfig.tenant_id) {
+  const tenantId = authConfig.tenant_id.trim()
+  if (!tenantId) {
+    if (activeAccount) {
+      return activeAccount
+    }
+    const accounts = pca.getAllAccounts()
+    if (accounts.length === 1) {
+      pca.setActiveAccount(accounts[0])
+      return accounts[0]
+    }
+    throw new Error('No active account selected')
+  }
+
+  if (activeAccount?.tenantId === tenantId) {
     return activeAccount
   }
 
-  const tenantAccount = pca.getAllAccounts().find(a => a.tenantId === authConfig!.tenant_id)
+  const tenantAccount = pca.getAllAccounts().find(a => a.tenantId === tenantId)
   if (!tenantAccount) {
     if (activeAccount) {
       pca.setActiveAccount(null)

@@ -74,6 +74,12 @@ func TestParseTrustedProxies(t *testing.T) {
 	assert.True(t, nets[2].Contains(net.ParseIP("::1")))
 }
 
+func TestEntraConfigAuthorityTenantID(t *testing.T) {
+	assert.Equal(t, "common", (EntraConfig{}).AuthorityTenantID())
+	assert.Equal(t, "common", (EntraConfig{TenantID: "  "}).AuthorityTenantID())
+	assert.Equal(t, "tenant-id", (EntraConfig{TenantID: "tenant-id"}).AuthorityTenantID())
+}
+
 func TestParseTrustedProxies_Empty(t *testing.T) {
 	nets, err := ParseTrustedProxies(nil)
 	assert.NoError(t, err)
