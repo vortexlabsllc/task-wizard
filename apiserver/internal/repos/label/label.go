@@ -8,31 +8,35 @@ import (
 	"gorm.io/gorm"
 	config "taskwiz.app/core/config"
 	"taskwiz.app/core/internal/models"
+	database "taskwiz.app/core/internal/utils/database"
 )
 
+// Connection routing for this repository:
+//   - RW (primary): all writes and transactions
+//   - R: ordinary reads
 type LabelRepository struct {
-	db *gorm.DB
+	db *database.DB
 }
 
-func NewLabelRepository(db *gorm.DB, cfg *config.Config) *LabelRepository {
+func NewLabelRepository(db *database.DB, cfg *config.Config) *LabelRepository {
 	return &LabelRepository{db: db}
 }
 
 func (r *LabelRepository) GetUserLabels(ctx context.Context, userID int) ([]*models.Label, error) {
 	var labels []*models.Label
-	if err := r.db.WithContext(ctx).Select("id", "name", "color").Where("created_by = ?", userID).Find(&labels).Error; err != nil {
+	if err := r.db.R().WithContext(ctx).Select("id", "name", "color").Where("created_by = ?", userID).Find(&labels).Error; err != nil {
 		return nil, err
 	}
 	return labels, nil
 }
 
 func (r *LabelRepository) CreateLabels(ctx context.Context, labels []*models.Label) error {
-	return r.db.WithContext(ctx).Create(&labels).Error
+	return r.db.RW().WithContext(ctx).Create(&labels).Error
 }
 
 func (r *LabelRepository) LabelExistsByName(ctx context.Context, userID int, name string, excludeLabelID int) (bool, error) {
 	var count int64
-	q := r.db.WithContext(ctx).Model(&models.Label{}).Where("created_by = ? AND name = ?", userID, name)
+	q := r.db.R().WithContext(ctx).Model(&models.Label{}).Where("created_by = ? AND name = ?", userID, name)
 	if excludeLabelID > 0 {
 		q = q.Where("id != ?", excludeLabelID)
 	}
@@ -45,7 +49,7 @@ func (r *LabelRepository) LabelExistsByName(ctx context.Context, userID int, nam
 func (r *LabelRepository) AreLabelsAssignableByUser(ctx context.Context, userID int, labels []int) bool {
 	var count int64
 
-	if err := r.db.WithContext(ctx).Model(&models.Label{}).Where("id IN (?) AND created_by = ?", labels, userID).Count(&count).Error; err != nil {
+	if err := r.db.R().WithContext(ctx).Model(&models.Label{}).Where("id IN (?) AND created_by = ?", labels, userID).Count(&count).Error; err != nil {
 		return false
 	}
 
@@ -69,7 +73,7 @@ func (r *LabelRepository) AssignLabelsToTask(ctx context.Context, taskID int, us
 		})
 	}
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return r.db.RW().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.WithContext(ctx).Where("task_id = ?", taskID).Delete(&models.TaskLabel{}).Error; err != nil {
 			return err
 		}
@@ -83,7 +87,7 @@ func (r *LabelRepository) AssignLabelsToTask(ctx context.Context, taskID int, us
 }
 
 func (r *LabelRepository) DeleteLabel(ctx context.Context, userID int, labelID int) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return r.db.RW().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var labelCount int64
 		if err := tx.Model(&models.Label{}).Where("id = ? AND created_by = ?", labelID, userID).Count(&labelCount).Error; err != nil {
 			return err
@@ -102,5 +106,5 @@ func (r *LabelRepository) DeleteLabel(ctx context.Context, userID int, labelID i
 }
 
 func (r *LabelRepository) UpdateLabel(ctx context.Context, userID int, label *models.Label) error {
-	return r.db.WithContext(ctx).Model(&models.Label{}).Where("id = ? and created_by = ?", label.ID, userID).Updates(label).Error
+	return r.db.RW().WithContext(ctx).Model(&models.Label{}).Where("id = ? and created_by = ?", label.ID, userID).Updates(label).Error
 }

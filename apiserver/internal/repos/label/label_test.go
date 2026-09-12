@@ -22,7 +22,7 @@ func TestLabelTestSuite(t *testing.T) {
 
 func (s *LabelTestSuite) SetupTest() {
 	s.DatabaseTestSuite.SetupTest()
-	s.repo = &LabelRepository{db: s.DB}
+	s.repo = &LabelRepository{db: s.DBPool}
 
 	s.testUser = &models.User{
 		ID:        1,

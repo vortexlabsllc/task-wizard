@@ -23,16 +23,18 @@ func (m *AccountDeletionMigration) Name() string {
 
 func (m *AccountDeletionMigration) Up(ctx context.Context, db *gorm.DB) error {
 	dbCtx := db.WithContext(ctx)
-	dialect := db.Name()
 
-	switch dialect {
+	var stmt string
+	switch db.Name() {
 	case "sqlite":
-		return dbCtx.Exec("ALTER TABLE users ADD COLUMN deletion_requested_at DATETIME DEFAULT NULL").Error
-	case "mysql":
-		return dbCtx.Exec("ALTER TABLE users ADD COLUMN deletion_requested_at DATETIME DEFAULT NULL").Error
+		stmt = "ALTER TABLE users ADD COLUMN deletion_requested_at DATETIME DEFAULT NULL"
+	case "postgres":
+		stmt = "ALTER TABLE users ADD COLUMN deletion_requested_at TIMESTAMPTZ DEFAULT NULL"
 	default:
-		return fmt.Errorf("unsupported dialect: %s", dialect)
+		return fmt.Errorf("unsupported dialect: %s", db.Name())
 	}
+
+	return dbCtx.Exec(stmt).Error
 }
 
 func (m *AccountDeletionMigration) Down(ctx context.Context, db *gorm.DB) error {
@@ -61,7 +63,7 @@ func (m *AccountDeletionMigration) Down(ctx context.Context, db *gorm.DB) error 
 			}
 		}
 		return nil
-	case "mysql":
+	case "postgres":
 		return dbCtx.Exec("ALTER TABLE users DROP COLUMN deletion_requested_at").Error
 	default:
 		return fmt.Errorf("unsupported dialect: %s", dialect)

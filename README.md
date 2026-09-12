@@ -105,11 +105,58 @@ Task Wizard supports optional Application Insights telemetry for both the API se
 
 ### Database Configuration
 
-Task Wizard supports both SQLite and MySQL databases. By default, it uses SQLite.
+Task Wizard supports **PostgreSQL** (first-class, recommended for cloud-native
+setups such as Azure Database for PostgreSQL, RDS, or Cloud SQL) and **SQLite**
+(single-file, local development, zero-config). Connection settings are expressed
+as full DSN connection strings, so SSL options (`sslmode`), proxies, and managed
+database endpoints all work out of the box.
 
-#### SQLite (default)
+#### PostgreSQL
 
-To use SQLite, set `database.type` to `sqlite` (or leave it unset) in your `config.yaml`:
+Configure a full DSN for the primary (read-write) connection. `dsn` is required
+when `database.type` is `postgres` and also acts as the fallback for the other
+pools:
+
+```yaml
+database:
+  type: postgres
+  # Primary read-write connection (required for postgres)
+  dsn: "postgres://taskuser:taskpass@localhost:5432/taskwizard?sslmode=require"
+  # Optional: ordinary reads are routed here when set
+  dsn_r: "postgres://ro_user:pass@replica1:5432/taskwizard?sslmode=require"
+  # Optional: heavy/reporting reads are routed here when set
+  dsn_ro: "postgres://report_user:pass@replica2:5432/taskwizard?sslmode=require"
+  migration: true
+```
+
+You can also use environment variables (secret-injection friendly):
+
+- `TW_DATABASE_TYPE` - Database type (`postgres` or `sqlite`)
+- `TW_DATABASE_DSN` - Primary (read-write) DSN
+- `TW_DATABASE_DSN_R` - Read (R) DSN
+- `TW_DATABASE_DSN_RO` - Read-only replica (RO) DSN
+
+#### Read / read-only replica routing
+
+The API server opens up to three connection pools and routes workloads by
+expected staleness tolerance:
+
+- **`dsn` (RW / primary)** — all writes, transactions, migrations, and
+  read-your-writes paths (e.g. session validation, user creation).
+- **`dsn_r` (R)** — ordinary reads. Falls back to the primary pool when unset.
+- **`dsn_ro` (RO)** — heavy/reporting reads (title search, recent-activity
+  joins, scheduled scans). Falls back to the R pool (which may itself be the
+  primary) when unset.
+
+> **Replication-lag caveat:** R/RO pools are for reads that can tolerate some
+> staleness. Anything user-facing that must observe a write from the same
+> request (e.g. "create task, then list tasks") stays on the primary pool to
+> avoid read-your-write bugs.
+
+#### SQLite (local development)
+
+SQLite is the zero-config default for local development. It uses a single
+file and does not apply an R/RO split:
 
 ```yaml
 database:
@@ -117,30 +164,6 @@ database:
   path: /config/task-wizard.db
   migration: true
 ```
-
-#### MySQL
-
-To use MySQL, configure the database section:
-
-```yaml
-database:
-  type: mysql
-  host: localhost
-  port: 3306
-  database: taskwizard
-  username: taskuser
-  password: taskpass
-  migration: true
-```
-
-You can also use environment variables for database configuration:
-
-- `TW_DATABASE_TYPE` - Database type (sqlite or mysql)
-- `TW_DATABASE_HOST` - Database host
-- `TW_DATABASE_PORT` - Database port
-- `TW_DATABASE_NAME` - Database name
-- `TW_DATABASE_USERNAME` - Database username
-- `TW_DATABASE_PASSWORD` - Database password
 
 ### Authentication Configuration
 
@@ -158,14 +181,12 @@ The configuration files are yaml mappings with the following values:
 | Configuration Entry                      | Default Value                                       | Description                                                                 |
 |------------------------------------------|-----------------------------------------------------|-----------------------------------------------------------------------------|
 | `name`                                   | `"prod"`                                            | The name of the environment configuration.                                  |
-| `database.type`                          | `sqlite`                                            | Database type: `sqlite` or `mysql`.                                         |
+| `database.type`                          | `sqlite`                                            | Database type: `postgres` or `sqlite`.                                       |
 | `database.migration`                     | `true`                                              | Indicates if database migration should be performed.                        |
 | `database.path`                          | `/config/task-wizard.db`                            | The path at which to store the SQLite database (SQLite only).               |
-| `database.host`                          | (empty)                                             | Database host (MySQL only).                                                 |
-| `database.port`                          | `3306`                                              | Database port (MySQL only).                                                 |
-| `database.database`                      | (empty)                                             | Database name (MySQL only).                                                 |
-| `database.username`                      | (empty)                                             | Database username (MySQL only).                                             |
-| `database.password`                      | (empty)                                             | Database password (MySQL only).                                             |
+| `database.dsn`                           | (empty)                                             | Primary read-write DSN (PostgreSQL; required when `type: postgres`).         |
+| `database.dsn_r`                         | (empty)                                             | Read (R) DSN for ordinary reads; falls back to `dsn`.                        |
+| `database.dsn_ro`                        | (empty)                                             | Read-only replica (RO) DSN for heavy/reporting reads; falls back to `dsn_r`. |
 | `entra.enabled`                          | `false`                                             | Enables Microsoft Entra ID (Azure AD) authentication.                       |
 | `entra.tenant_id`                        | (empty)                                             | The Azure AD tenant ID for authentication.                                  |
 | `entra.client_id`                        | (empty)                                             | The Azure AD application (client) ID.                                       |

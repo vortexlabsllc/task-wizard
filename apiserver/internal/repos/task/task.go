@@ -9,22 +9,27 @@ import (
 	"gorm.io/gorm"
 	config "taskwiz.app/core/config"
 	"taskwiz.app/core/internal/models"
+	database "taskwiz.app/core/internal/utils/database"
 )
 
+// Connection routing for this repository:
+//   - RW (primary): all writes and transactions
+//   - R: ordinary reads
+//   - RO: heavy/reporting reads (title search, recent activity)
 type TaskRepository struct {
-	db *gorm.DB
+	db *database.DB
 }
 
-func NewTaskRepository(db *gorm.DB, cfg *config.Config) *TaskRepository {
+func NewTaskRepository(db *database.DB, cfg *config.Config) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
 func (r *TaskRepository) UpsertTask(c context.Context, task *models.Task) error {
-	return r.db.WithContext(c).Model(&task).Save(task).Error
+	return r.db.RW().WithContext(c).Model(&task).Save(task).Error
 }
 
 func (r *TaskRepository) CreateTask(c context.Context, task *models.Task) (int, error) {
-	if err := r.db.WithContext(c).Create(task).Error; err != nil {
+	if err := r.db.RW().WithContext(c).Create(task).Error; err != nil {
 		return 0, err
 	}
 	return task.ID, nil
@@ -32,7 +37,7 @@ func (r *TaskRepository) CreateTask(c context.Context, task *models.Task) (int, 
 
 func (r *TaskRepository) GetTask(c context.Context, taskID int) (*models.Task, error) {
 	var task models.Task
-	if err := r.db.WithContext(c).
+	if err := r.db.R().WithContext(c).
 		Model(&models.Task{}).
 		Preload("Labels").
 		First(&task, taskID).Error; err != nil {
@@ -44,7 +49,7 @@ func (r *TaskRepository) GetTask(c context.Context, taskID int) (*models.Task, e
 func (r *TaskRepository) GetTasks(c context.Context, userID int) ([]*models.Task, error) {
 	var tasks []*models.Task
 
-	if err := r.db.WithContext(c).
+	if err := r.db.R().WithContext(c).
 		Where("created_by = ? AND is_active = 1", userID).
 		Order("next_due_date ASC").
 		Preload("Labels").
@@ -58,7 +63,7 @@ func (r *TaskRepository) GetTasks(c context.Context, userID int) ([]*models.Task
 func (r *TaskRepository) GetTasksDueBefore(c context.Context, userID int, before time.Time) ([]*models.Task, error) {
 	var tasks []*models.Task
 
-	if err := r.db.WithContext(c).
+	if err := r.db.R().WithContext(c).
 		Where("created_by = ? AND is_active = 1 AND next_due_date < ?", userID, before).
 		Order("next_due_date ASC").
 		Preload("Labels").
@@ -72,7 +77,7 @@ func (r *TaskRepository) GetTasksDueBefore(c context.Context, userID int, before
 func (r *TaskRepository) GetTasksByLabel(c context.Context, userID int, labelID int) ([]*models.Task, error) {
 	var tasks []*models.Task
 
-	if err := r.db.WithContext(c).
+	if err := r.db.R().WithContext(c).
 		Where("created_by = ? AND is_active = 1", userID).
 		Joins("JOIN task_labels ON task_labels.task_id = tasks.id AND task_labels.label_id = ?", labelID).
 		Order("next_due_date ASC").
@@ -88,14 +93,14 @@ func (r *TaskRepository) SearchTasksByTitle(c context.Context, userID int, query
 	var tasks []*models.Task
 
 	// Escape LIKE wildcards so they match literally. Use '!' as the escape
-	// character because backslash has dialect-specific meaning inside MySQL
-	// string literals by default and would produce a SQL syntax error.
+	// character because backslash has dialect-specific meaning inside string
+	// literals in some databases.
 	escaped := strings.ReplaceAll(query, "!", "!!")
 	escaped = strings.ReplaceAll(escaped, "%", "!%")
 	escaped = strings.ReplaceAll(escaped, "_", "!_")
 	pattern := "%" + strings.ToLower(escaped) + "%"
 
-	if err := r.db.WithContext(c).
+	if err := r.db.RO().WithContext(c).
 		Where("created_by = ? AND is_active = 1 AND LOWER(title) LIKE ? ESCAPE '!'", userID, pattern).
 		Order("next_due_date ASC").
 		Preload("Labels").
@@ -109,7 +114,7 @@ func (r *TaskRepository) SearchTasksByTitle(c context.Context, userID int, query
 func (r *TaskRepository) GetRecentActivity(c context.Context, userID, beforeID, limit int) ([]*models.ActivityEntry, error) {
 	var entries []*models.ActivityEntry
 
-	q := r.db.WithContext(c).
+	q := r.db.RO().WithContext(c).
 		Table("task_histories AS th").
 		Select(`th.id AS id, th.task_id AS task_id, t.title AS task_title,
 			th.completed_date AS completed_date, th.due_date AS due_date,
@@ -129,16 +134,16 @@ func (r *TaskRepository) GetRecentActivity(c context.Context, userID, beforeID, 
 }
 
 func (r *TaskRepository) DeleteTask(c context.Context, id int) error {
-	return r.db.WithContext(c).Where("id = ?", id).Delete(&models.Task{}).Error
+	return r.db.RW().WithContext(c).Where("id = ?", id).Delete(&models.Task{}).Error
 }
 
 func (r *TaskRepository) IsTaskOwner(c context.Context, taskID int, userID int) error {
 	var task models.Task
-	return r.db.WithContext(c).Model(&models.Task{}).Where("id = ? AND created_by = ?", taskID, userID).First(&task).Error
+	return r.db.R().WithContext(c).Model(&models.Task{}).Where("id = ? AND created_by = ?", taskID, userID).First(&task).Error
 }
 
 func (r *TaskRepository) CompleteTask(c context.Context, task *models.Task, userID int, dueDate *time.Time, completedDate *time.Time) error {
-	err := r.db.WithContext(c).Transaction(func(tx *gorm.DB) error {
+	err := r.db.RW().WithContext(c).Transaction(func(tx *gorm.DB) error {
 		ch := &models.TaskHistory{
 			TaskID:        task.ID,
 			CompletedDate: completedDate,
@@ -169,7 +174,7 @@ func (r *TaskRepository) CompleteTask(c context.Context, task *models.Task, user
 var ErrActivityNotLatest = errors.New("history entry is not the latest action for the task")
 
 func (r *TaskRepository) RevertActivity(c context.Context, taskID int, historyID int) error {
-	return r.db.WithContext(c).Transaction(func(tx *gorm.DB) error {
+	return r.db.RW().WithContext(c).Transaction(func(tx *gorm.DB) error {
 		var latestID *int
 		if err := tx.Model(&models.TaskHistory{}).
 			Where("task_id = ?", taskID).
@@ -212,7 +217,7 @@ func (r *TaskRepository) RevertActivity(c context.Context, taskID int, historyID
 
 func (r *TaskRepository) GetTaskHistory(c context.Context, taskID int) ([]*models.TaskHistory, error) {
 	var histories []*models.TaskHistory
-	if err := r.db.WithContext(c).Where("task_id = ?", taskID).Order("due_date desc").Find(&histories).Error; err != nil {
+	if err := r.db.R().WithContext(c).Where("task_id = ?", taskID).Order("due_date desc").Find(&histories).Error; err != nil {
 		return nil, err
 	}
 	return histories, nil

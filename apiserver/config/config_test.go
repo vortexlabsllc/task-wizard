@@ -197,32 +197,26 @@ server:
 `)
 	assert.NoError(t, err)
 
-	_ = os.Setenv("TW_DATABASE_TYPE", "mysql")
-	_ = os.Setenv("TW_DATABASE_HOST", "localhost")
-	_ = os.Setenv("TW_DATABASE_PORT", "3307")
-	_ = os.Setenv("TW_DATABASE_NAME", "taskwizard")
-	_ = os.Setenv("TW_DATABASE_USERNAME", "dbuser")
-	_ = os.Setenv("TW_DATABASE_PASSWORD", "dbpass")
+	_ = os.Setenv("TW_DATABASE_TYPE", "postgres")
+	_ = os.Setenv("TW_DATABASE_DSN", "postgres://dbuser:dbpass@localhost:5432/taskwizard?sslmode=disable")
+	_ = os.Setenv("TW_DATABASE_DSN_R", "postgres://ro:ro@localhost:5432/taskwizard?sslmode=disable")
+	_ = os.Setenv("TW_DATABASE_DSN_RO", "postgres://ro2:ro2@localhost:5432/taskwizard?sslmode=disable")
 
 	viper.Reset()
 	cfg := LoadConfig("./config/config.yaml")
 
-	assert.Equal(t, "mysql", cfg.Database.Type)
-	assert.Equal(t, "localhost", cfg.Database.Host)
-	assert.Equal(t, 3307, cfg.Database.Port)
-	assert.Equal(t, "taskwizard", cfg.Database.Database)
-	assert.Equal(t, "dbuser", cfg.Database.Username)
-	assert.Equal(t, "dbpass", cfg.Database.Password)
+	assert.Equal(t, "postgres", cfg.Database.Type)
+	assert.Equal(t, "postgres://dbuser:dbpass@localhost:5432/taskwizard?sslmode=disable", cfg.Database.DSN)
+	assert.Equal(t, "postgres://ro:ro@localhost:5432/taskwizard?sslmode=disable", cfg.Database.DSNR)
+	assert.Equal(t, "postgres://ro2:ro2@localhost:5432/taskwizard?sslmode=disable", cfg.Database.DSNRO)
 
 	_ = os.Unsetenv("TW_DATABASE_TYPE")
-	_ = os.Unsetenv("TW_DATABASE_HOST")
-	_ = os.Unsetenv("TW_DATABASE_PORT")
-	_ = os.Unsetenv("TW_DATABASE_NAME")
-	_ = os.Unsetenv("TW_DATABASE_USERNAME")
-	_ = os.Unsetenv("TW_DATABASE_PASSWORD")
+	_ = os.Unsetenv("TW_DATABASE_DSN")
+	_ = os.Unsetenv("TW_DATABASE_DSN_R")
+	_ = os.Unsetenv("TW_DATABASE_DSN_RO")
 }
 
-func TestLoadConfig_MySQLConfig(t *testing.T) {
+func TestLoadConfig_PostgresConfig(t *testing.T) {
 	_ = os.MkdirAll("./config", 0755)
 	f, err := os.Create("./config/config.yaml")
 	assert.NoError(t, err)
@@ -230,12 +224,10 @@ func TestLoadConfig_MySQLConfig(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	_, err = f.WriteString(`database:
-  type: mysql
-  host: mysql.example.com
-  port: 3306
-  database: taskwizard
-  username: testuser
-  password: testpass
+  type: postgres
+  dsn: postgres://testuser:testpass@postgres.example.com:5432/taskwizard?sslmode=require
+  dsn_r: postgres://ro:ro@replica.example.com:5432/taskwizard?sslmode=require
+  dsn_ro: postgres://report:report@report.example.com:5432/taskwizard?sslmode=require
   migration: true
 server:
   port: 1234
@@ -245,12 +237,10 @@ server:
 	viper.Reset()
 	cfg := LoadConfig("./config/config.yaml")
 
-	assert.Equal(t, "mysql", cfg.Database.Type)
-	assert.Equal(t, "mysql.example.com", cfg.Database.Host)
-	assert.Equal(t, 3306, cfg.Database.Port)
-	assert.Equal(t, "taskwizard", cfg.Database.Database)
-	assert.Equal(t, "testuser", cfg.Database.Username)
-	assert.Equal(t, "testpass", cfg.Database.Password)
+	assert.Equal(t, "postgres", cfg.Database.Type)
+	assert.Equal(t, "postgres://testuser:testpass@postgres.example.com:5432/taskwizard?sslmode=require", cfg.Database.DSN)
+	assert.Equal(t, "postgres://ro:ro@replica.example.com:5432/taskwizard?sslmode=require", cfg.Database.DSNR)
+	assert.Equal(t, "postgres://report:report@report.example.com:5432/taskwizard?sslmode=require", cfg.Database.DSNRO)
 	assert.Equal(t, true, cfg.Database.Migration)
 }
 

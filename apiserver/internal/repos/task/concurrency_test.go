@@ -23,7 +23,7 @@ func TestTaskConcurrencyTestSuite(t *testing.T) {
 
 func (s *TaskConcurrencyTestSuite) SetupTest() {
 	s.DatabaseTestSuite.SetupTest()
-	s.repo = &TaskRepository{db: s.DB}
+	s.repo = &TaskRepository{db: s.DBPool}
 	s.testUser = &models.User{ID: 1, CreatedAt: time.Now()}
 	s.Require().NoError(s.DB.Create(s.testUser).Error)
 }

@@ -2,7 +2,6 @@ package migrations
 
 import (
 	"context"
-	"fmt"
 
 	"gorm.io/gorm"
 )
@@ -37,20 +36,9 @@ func (m *DropPasswordMigration) Up(ctx context.Context, db *gorm.DB) error {
 func (m *DropPasswordMigration) Down(ctx context.Context, db *gorm.DB) error {
 	dbCtx := db.WithContext(ctx)
 	migrator := dbCtx.Migrator()
-	dialect := db.Name()
 
 	if !migrator.HasColumn("users", "password") {
-		var colType string
-		switch dialect {
-		case "sqlite":
-			colType = "TEXT"
-		case "mysql":
-			colType = "VARCHAR(255)"
-		default:
-			return fmt.Errorf("unsupported dialect: %s", dialect)
-		}
-
-		if err := dbCtx.Exec(fmt.Sprintf("ALTER TABLE users ADD COLUMN password %s NOT NULL DEFAULT ''", colType)).Error; err != nil {
+		if err := dbCtx.Exec("ALTER TABLE users ADD COLUMN password TEXT NOT NULL DEFAULT ''").Error; err != nil {
 			return err
 		}
 	}

@@ -1,4 +1,7 @@
 database:
+  # Local development default: zero-config single-file SQLite.
+  # For Postgres, set type: postgres and dsn (see config.yaml for the
+  # full DSN / read-replica documentation).
   type: sqlite
   migration: true
   path: task-wizard.db

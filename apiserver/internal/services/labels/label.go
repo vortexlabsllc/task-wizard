@@ -186,8 +186,7 @@ func (s *LabelService) DeleteLabel(ctx context.Context, userID int, labelID int)
 func isDuplicateKeyError(err error) bool {
 	msg := err.Error()
 	// SQLite: "UNIQUE constraint failed: ..."
-	// MySQL: "Error 1062 (23000): Duplicate entry ..."
+	// Postgres: "duplicate key value violates unique constraint ..."
 	return strings.Contains(msg, "UNIQUE constraint failed") ||
-		strings.Contains(msg, "Duplicate entry") ||
-		strings.Contains(msg, "Error 1062")
+		strings.Contains(msg, "duplicate key value violates unique constraint")
 }

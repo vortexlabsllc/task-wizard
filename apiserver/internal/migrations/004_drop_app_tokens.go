@@ -37,12 +37,12 @@ func (m *DropAppTokensMigration) Up(ctx context.Context, db *gorm.DB) error {
 func (m *DropAppTokensMigration) Down(ctx context.Context, db *gorm.DB) error {
 	dbCtx := db.WithContext(ctx)
 	migrator := dbCtx.Migrator()
-	dialect := db.Name()
 
 	if !migrator.HasTable("app_tokens") {
-		switch dialect {
+		var createStmt string
+		switch db.Name() {
 		case "sqlite":
-			if err := dbCtx.Exec(`CREATE TABLE app_tokens (
+			createStmt = `CREATE TABLE app_tokens (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				user_id INTEGER NOT NULL,
 				name TEXT NOT NULL,
@@ -51,34 +51,26 @@ func (m *DropAppTokensMigration) Down(ctx context.Context, db *gorm.DB) error {
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 				expires_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			)`).Error; err != nil {
-				return err
-			}
-		case "mysql":
-			if err := dbCtx.Exec(`CREATE TABLE app_tokens (
-				id INT AUTO_INCREMENT PRIMARY KEY,
-				user_id INT NOT NULL,
-				name VARCHAR(255) NOT NULL,
+			)`
+		case "postgres":
+			createStmt = `CREATE TABLE app_tokens (
+				id BIGSERIAL PRIMARY KEY,
+				user_id BIGINT NOT NULL,
+				name TEXT NOT NULL,
 				token TEXT NOT NULL,
 				scopes TEXT,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				expires_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+				expires_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			)`).Error; err != nil {
-				return err
-			}
+			)`
 		default:
-			return fmt.Errorf("unsupported dialect: %s", dialect)
+			return fmt.Errorf("unsupported dialect: %s", db.Name())
+		}
+		if err := dbCtx.Exec(createStmt).Error; err != nil {
+			return err
 		}
 
-		var idxCol string
-		switch dialect {
-		case "sqlite":
-			idxCol = "token"
-		case "mysql":
-			idxCol = "token(255)"
-		}
-		if err := dbCtx.Exec("CREATE INDEX idx_app_tokens_token ON app_tokens(" + idxCol + ")").Error; err != nil {
+		if err := dbCtx.Exec("CREATE INDEX idx_app_tokens_token ON app_tokens(token)").Error; err != nil {
 			return err
 		}
 	}

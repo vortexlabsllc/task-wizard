@@ -23,7 +23,7 @@ func TestTaskTestSuite(t *testing.T) {
 
 func (s *TaskTestSuite) SetupTest() {
 	s.DatabaseTestSuite.SetupTest()
-	s.repo = &TaskRepository{db: s.DB}
+	s.repo = &TaskRepository{db: s.DBPool}
 
 	s.testUser = &models.User{
 		ID:        1,

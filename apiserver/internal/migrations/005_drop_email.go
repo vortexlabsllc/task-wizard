@@ -27,6 +27,8 @@ func (m *DropPIIMigration) Up(ctx context.Context, db *gorm.DB) error {
 
 	switch dialect {
 	case "sqlite":
+		// SQLite cannot drop columns in older versions reliably, so rebuild
+		// the table without the PII columns.
 		stmts := []string{
 			`CREATE TABLE users_new (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +48,7 @@ func (m *DropPIIMigration) Up(ctx context.Context, db *gorm.DB) error {
 				return err
 			}
 		}
-	case "mysql":
+	case "postgres":
 		for _, col := range []string{"email", "display_name"} {
 			if err := dbCtx.Exec("ALTER TABLE users DROP COLUMN " + col).Error; err != nil {
 				return err
@@ -73,10 +75,10 @@ func (m *DropPIIMigration) Down(ctx context.Context, db *gorm.DB) error {
 				return err
 			}
 		}
-	case "mysql":
+	case "postgres":
 		for _, stmt := range []string{
-			"ALTER TABLE users ADD COLUMN email VARCHAR(255) NOT NULL DEFAULT ''",
-			"ALTER TABLE users ADD COLUMN display_name VARCHAR(255) NOT NULL DEFAULT ''",
+			"ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''",
 		} {
 			if err := dbCtx.Exec(stmt).Error; err != nil {
 				return err
