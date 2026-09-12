@@ -23,7 +23,7 @@ func TestNotifierTestSuite(t *testing.T) {
 
 func (s *NotifierTestSuite) SetupTest() {
 	s.DatabaseTestSuite.SetupTest()
-	s.repo = NewNotificationRepository(s.DB)
+	s.repo = NewNotificationRepository(s.DBPool)
 
 	s.testUser = &models.User{
 		ID:        1,

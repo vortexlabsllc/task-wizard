@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
 	"taskwiz.app/core/internal/models"
+	database "taskwiz.app/core/internal/utils/database"
 )
 
+// Connection routing for this repository: everything runs on RW (primary).
+// Session creation/validation is a hot read-your-writes path, and the
+// remaining methods are writes.
 type ISessionRepo interface {
 	CreateSession(ctx context.Context, userID int, duration time.Duration) (string, error)
 	ValidateSession(ctx context.Context, rawToken string) (*models.Session, error)
@@ -21,12 +24,12 @@ type ISessionRepo interface {
 }
 
 type SessionRepository struct {
-	db *gorm.DB
+	db *database.DB
 }
 
 var _ ISessionRepo = (*SessionRepository)(nil)
 
-func NewSessionRepository(db *gorm.DB) ISessionRepo {
+func NewSessionRepository(db *database.DB) ISessionRepo {
 	return &SessionRepository{db: db}
 }
 
@@ -55,7 +58,7 @@ func (r *SessionRepository) CreateSession(ctx context.Context, userID int, durat
 		ExpiresAt: time.Now().UTC().Add(duration),
 	}
 
-	if err := r.db.WithContext(ctx).Create(session).Error; err != nil {
+	if err := r.db.RW().WithContext(ctx).Create(session).Error; err != nil {
 		return "", fmt.Errorf("create session: %s", err.Error())
 	}
 
@@ -66,12 +69,12 @@ func (r *SessionRepository) ValidateSession(ctx context.Context, rawToken string
 	var session models.Session
 	tokenHash := hashToken(rawToken)
 
-	if err := r.db.WithContext(ctx).Where("token_hash = ?", tokenHash).First(&session).Error; err != nil {
+	if err := r.db.RW().WithContext(ctx).Where("token_hash = ?", tokenHash).First(&session).Error; err != nil {
 		return nil, fmt.Errorf("session not found: %s", err.Error())
 	}
 
 	if time.Now().UTC().After(session.ExpiresAt) {
-		_ = r.db.WithContext(ctx).Delete(&session)
+		_ = r.db.RW().WithContext(ctx).Delete(&session)
 		return nil, fmt.Errorf("session has expired")
 	}
 
@@ -80,13 +83,13 @@ func (r *SessionRepository) ValidateSession(ctx context.Context, rawToken string
 
 func (r *SessionRepository) DeleteSession(ctx context.Context, rawToken string) error {
 	tokenHash := hashToken(rawToken)
-	return r.db.WithContext(ctx).Where("token_hash = ?", tokenHash).Delete(&models.Session{}).Error
+	return r.db.RW().WithContext(ctx).Where("token_hash = ?", tokenHash).Delete(&models.Session{}).Error
 }
 
 func (r *SessionRepository) DeleteUserSessions(ctx context.Context, userID int) error {
-	return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&models.Session{}).Error
+	return r.db.RW().WithContext(ctx).Where("user_id = ?", userID).Delete(&models.Session{}).Error
 }
 
 func (r *SessionRepository) CleanupExpired(ctx context.Context) error {
-	return r.db.WithContext(ctx).Where("expires_at < ?", time.Now().UTC()).Delete(&models.Session{}).Error
+	return r.db.RW().WithContext(ctx).Where("expires_at < ?", time.Now().UTC()).Delete(&models.Session{}).Error
 }

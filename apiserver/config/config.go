@@ -17,14 +17,23 @@ type Config struct {
 	SchedulerJobs SchedulerConfig `mapstructure:"scheduler_jobs" yaml:"scheduler_jobs"`
 }
 
+// DatabaseConfig describes the database connection(s).
+//
+// For type "postgres", DSN is the primary (read-write) connection string and
+// is required. DSN_R (optional) serves ordinary reads, and DSN_RO (optional)
+// serves heavy/reporting reads; each falls back to the previous tier when
+// unset. DSN values are full connection strings (e.g.
+// "postgres://user:pass@host:5432/db?sslmode=require"), so cloud-native
+// endpoints and SSL options are handled by the driver.
+//
+// For type "sqlite" (the default), only FilePath is used and the DSN fields
+// are ignored (single file, no read replica split).
 type DatabaseConfig struct {
 	Type      string `mapstructure:"type" yaml:"type" default:"sqlite"`
 	FilePath  string `mapstructure:"path" yaml:"path" default:"/config/task-wizard.db"`
-	Host      string `mapstructure:"host" yaml:"host"`
-	Port      int    `mapstructure:"port" yaml:"port" default:"3306"`
-	Database  string `mapstructure:"database" yaml:"database"`
-	Username  string `mapstructure:"username" yaml:"username"`
-	Password  string `mapstructure:"password" yaml:"password"`
+	DSN       string `mapstructure:"dsn" yaml:"dsn"`
+	DSNR      string `mapstructure:"dsn_r" yaml:"dsn_r"`
+	DSNRO     string `mapstructure:"dsn_ro" yaml:"dsn_ro"`
 	Migration bool   `mapstructure:"migration" yaml:"migration"`
 }
 
@@ -85,11 +94,9 @@ func LoadConfig(configFile string) *Config {
 	_ = viper.BindEnv("server.session_duration", "TW_SESSION_DURATION")
 	_ = viper.BindEnv("server.allow_insecure_no_auth", "TW_ALLOW_INSECURE_NO_AUTH")
 	_ = viper.BindEnv("database.type", "TW_DATABASE_TYPE")
-	_ = viper.BindEnv("database.host", "TW_DATABASE_HOST")
-	_ = viper.BindEnv("database.port", "TW_DATABASE_PORT")
-	_ = viper.BindEnv("database.database", "TW_DATABASE_NAME")
-	_ = viper.BindEnv("database.username", "TW_DATABASE_USERNAME")
-	_ = viper.BindEnv("database.password", "TW_DATABASE_PASSWORD")
+	_ = viper.BindEnv("database.dsn", "TW_DATABASE_DSN")
+	_ = viper.BindEnv("database.dsn_r", "TW_DATABASE_DSN_R")
+	_ = viper.BindEnv("database.dsn_ro", "TW_DATABASE_DSN_RO")
 
 	err := viper.ReadInConfig()
 	if err != nil {

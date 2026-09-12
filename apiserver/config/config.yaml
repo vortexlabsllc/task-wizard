@@ -1,7 +1,18 @@
 database:
-  type: sqlite
+  # type: postgres (default) | sqlite
+  type: postgres
+  # Full DSN connection strings (cloud-native friendly, SSL options included).
+  # dsn is the primary read-write connection (required for postgres).
+  # dsn_r (optional) serves ordinary reads; dsn_ro (optional) serves
+  # heavy/reporting reads. Each falls back to the previous tier when unset.
+  # All values can be injected via TW_DATABASE_DSN / TW_DATABASE_DSN_R /
+  # TW_DATABASE_DSN_RO.
+  dsn: "postgres://user:pass@localhost:5432/taskwizard?sslmode=require"
+  # dsn_r: "postgres://ro_user:pass@replica1:5432/taskwizard?sslmode=require"
+  # dsn_ro: "postgres://report_user:pass@replica2:5432/taskwizard?sslmode=require"
   migration: true
-  path: /config/task-wizard.db
+  # sqlite only (use type: sqlite for local zero-config development):
+  # path: /config/task-wizard.db
 entra:
   enabled: false
   tenant_id: ""

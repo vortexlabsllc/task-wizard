@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"taskwiz.app/core/config"
 	"taskwiz.app/core/internal/models"
+	database "taskwiz.app/core/internal/utils/database"
 )
 
 var ErrDisabledUser = errors.New("account is disabled")
@@ -29,12 +30,12 @@ type IUserRepo interface {
 
 type UserRepository struct {
 	cfg *config.Config
-	db  *gorm.DB
+	db  *database.DB
 }
 
 var _ IUserRepo = (*UserRepository)(nil)
 
-func NewUserRepository(db *gorm.DB, cfg *config.Config) IUserRepo {
+func NewUserRepository(db *database.DB, cfg *config.Config) IUserRepo {
 	return &UserRepository{cfg, db}
 }
 
@@ -43,7 +44,7 @@ func (r *UserRepository) CreateUser(c context.Context, user *models.User) error 
 		return fmt.Errorf("new account registration is disabled")
 	}
 
-	return r.db.WithContext(c).Transaction(func(tx *gorm.DB) error {
+	return r.db.RW().WithContext(c).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&user).Error; err != nil {
 			return err
 		}
@@ -63,7 +64,7 @@ func (r *UserRepository) CreateUser(c context.Context, user *models.User) error 
 
 func (r *UserRepository) GetUser(c context.Context, id int) (*models.User, error) {
 	var user *models.User
-	if err := r.db.WithContext(c).Where("ID = ?", id).First(&user).Error; err != nil {
+	if err := r.db.R().WithContext(c).Where("ID = ?", id).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -71,19 +72,22 @@ func (r *UserRepository) GetUser(c context.Context, id int) (*models.User, error
 
 func (r *UserRepository) FindByEntraID(c context.Context, directoryID string, objectID string) (*models.User, error) {
 	var user *models.User
-	if err := r.db.WithContext(c).Where("directory_id = ? AND object_id = ?", directoryID, objectID).First(&user).Error; err != nil {
+	if err := r.db.R().WithContext(c).Where("directory_id = ? AND object_id = ?", directoryID, objectID).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return user, nil
 }
 
 func (r *UserRepository) EnsureUser(c context.Context, directoryID string, objectID string) (*models.User, error) {
-	user, err := r.FindByEntraID(c, directoryID, objectID)
+	// The read-then-write path must stay on the primary (RW) pool so the
+	// existence check and any insert observe each other (read-your-writes).
+	var user models.User
+	err := r.db.RW().WithContext(c).Where("directory_id = ? AND object_id = ?", directoryID, objectID).First(&user).Error
 	if err == nil {
 		if user.Disabled {
 			return nil, ErrDisabledUser
 		}
-		return user, nil
+		return &user, nil
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -103,19 +107,21 @@ func (r *UserRepository) EnsureUser(c context.Context, directoryID string, objec
 }
 
 func (r *UserRepository) UpdateNotificationSettings(c context.Context, userID int, provider models.NotificationProvider, triggers models.NotificationTriggerOptions) error {
-	return r.db.WithContext(c).Where("user_id = ?", userID).Updates(&models.NotificationSettings{
+	return r.db.RW().WithContext(c).Where("user_id = ?", userID).Updates(&models.NotificationSettings{
 		Provider: provider,
 		Triggers: triggers,
 	}).Error
 }
 
 func (r *UserRepository) DeleteNotificationsForUser(c context.Context, userID int) error {
-	return r.db.WithContext(c).Where("user_id = ?", userID).Delete(&models.NotificationSettings{}).Error
+	return r.db.RW().WithContext(c).Where("user_id = ?", userID).Delete(&models.NotificationSettings{}).Error
 }
 
 func (r *UserRepository) GetLastCreatedOrModifiedForUserResources(c context.Context, userID int) (string, error) {
+	// Drives client sync decisions (replica lag could cause resyncs), so it
+	// stays on the primary (RW) pool.
 	var result string
-	err := r.db.WithContext(c).Raw(`
+	err := r.db.RW().WithContext(c).Raw(`
 		SELECT 
 			MAX(
 				COALESCE(MAX(updated_at), '1970-01-01 00:00:00'),
@@ -133,22 +139,22 @@ func (r *UserRepository) GetLastCreatedOrModifiedForUserResources(c context.Cont
 
 func (r *UserRepository) RequestDeletion(c context.Context, userID int) error {
 	now := time.Now().UTC()
-	return r.db.WithContext(c).Model(&models.User{}).Where("id = ?", userID).Update("deletion_requested_at", now).Error
+	return r.db.RW().WithContext(c).Model(&models.User{}).Where("id = ?", userID).Update("deletion_requested_at", now).Error
 }
 
 func (r *UserRepository) CancelDeletion(c context.Context, userID int) error {
-	return r.db.WithContext(c).Model(&models.User{}).Where("id = ?", userID).Update("deletion_requested_at", nil).Error
+	return r.db.RW().WithContext(c).Model(&models.User{}).Where("id = ?", userID).Update("deletion_requested_at", nil).Error
 }
 
 func (r *UserRepository) FindUsersForDeletion(c context.Context, gracePeriod time.Duration) ([]models.User, error) {
 	threshold := time.Now().UTC().Add(-gracePeriod)
 	var users []models.User
-	err := r.db.WithContext(c).
+	err := r.db.RO().WithContext(c).
 		Where("deletion_requested_at IS NOT NULL AND deletion_requested_at <= ?", threshold).
 		Find(&users).Error
 	return users, err
 }
 
 func (r *UserRepository) DeleteUser(c context.Context, userID int) error {
-	return r.db.WithContext(c).Delete(&models.User{}, userID).Error
+	return r.db.RW().WithContext(c).Delete(&models.User{}, userID).Error
 }

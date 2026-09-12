@@ -9,19 +9,24 @@ import (
 	"gorm.io/gorm"
 	"taskwiz.app/core/internal/models"
 	"taskwiz.app/core/internal/services/logging"
+	database "taskwiz.app/core/internal/utils/database"
 )
 
+// Connection routing for this repository:
+//   - RW (primary): all writes (inserts, marking, deletions)
+//   - R: ordinary reads (notification settings)
+//   - RO: heavy scheduled scans (pending/overdue/missing references)
 type NotificationRepository struct {
-	db *gorm.DB
+	db *database.DB
 }
 
-func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
+func NewNotificationRepository(db *database.DB) *NotificationRepository {
 	return &NotificationRepository{db}
 }
 
 func (r *NotificationRepository) GetUserNotificationSettings(c context.Context, userID int) (*models.NotificationSettings, error) {
 	var settings models.NotificationSettings
-	if err := r.db.WithContext(c).Model(&models.NotificationSettings{}).First(&settings, userID).Error; err != nil {
+	if err := r.db.R().WithContext(c).Model(&models.NotificationSettings{}).First(&settings, userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return &models.NotificationSettings{UserID: userID}, nil
 		}
@@ -35,16 +40,16 @@ func (r *NotificationRepository) DeleteNotificationsByIDs(c context.Context, ids
 		return nil
 	}
 
-	return r.db.WithContext(c).Where("id IN ?", ids).Delete(&models.Notification{}).Error
+	return r.db.RW().WithContext(c).Where("id IN ?", ids).Delete(&models.Notification{}).Error
 }
 
 func (r *NotificationRepository) deleteAllTaskNotifications(taskID int) error {
-	return r.db.Where("task_id = ?", taskID).Delete(&models.Notification{}).Error
+	return r.db.RW().Where("task_id = ?", taskID).Delete(&models.Notification{}).Error
 }
 
 func (r *NotificationRepository) GetNotificationsWithMissingUserOrTask(c context.Context) ([]*models.Notification, error) {
 	var notifications []*models.Notification
-	err := r.db.WithContext(c).
+	err := r.db.RO().WithContext(c).
 		Raw(`
 			SELECT n.*
 			FROM notifications n
@@ -60,7 +65,7 @@ func (r *NotificationRepository) GetNotificationsWithMissingUserOrTask(c context
 }
 
 func (r *NotificationRepository) BatchInsertNotifications(notifications []models.Notification) error {
-	return r.db.Create(notifications).Error
+	return r.db.RW().Create(notifications).Error
 }
 
 func (r *NotificationRepository) GenerateNotifications(c context.Context, task *models.Task) {
@@ -116,13 +121,13 @@ func (r *NotificationRepository) MarkNotificationsAsSent(notifications []*models
 		ids = append(ids, notification.ID)
 	}
 
-	return r.db.Model(&models.Notification{}).Where("id IN (?)", ids).Update("is_sent", true).Error
+	return r.db.RW().Model(&models.Notification{}).Where("id IN (?)", ids).Update("is_sent", true).Error
 }
 
 func (r *NotificationRepository) GetPendingNotification(c context.Context, lookback time.Duration) ([]*models.Notification, error) {
 	var notifications []*models.Notification
 	cutoff := time.Now()
-	if err := r.db.Where("is_sent = 0 AND scheduled_for < ?", cutoff).Preload("User.NotificationSettings").Find(&notifications).Error; err != nil {
+	if err := r.db.RO().Where("is_sent = 0 AND scheduled_for < ?", cutoff).Preload("User.NotificationSettings").Find(&notifications).Error; err != nil {
 		return nil, err
 	}
 	return notifications, nil
@@ -130,7 +135,7 @@ func (r *NotificationRepository) GetPendingNotification(c context.Context, lookb
 
 func (r *NotificationRepository) GetOverdueTasksWithNotifications(c context.Context, now time.Time) ([]*models.Task, error) {
 	var tasks []*models.Task
-	if err := r.db.WithContext(c).Where("is_active = 1 AND next_due_date <= ? AND notification_overdue = 1", now).Select("id, created_by, title").Find(&tasks).Error; err != nil {
+	if err := r.db.RO().WithContext(c).Where("is_active = 1 AND next_due_date <= ? AND notification_overdue = 1", now).Select("id, created_by, title").Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 
@@ -138,5 +143,5 @@ func (r *NotificationRepository) GetOverdueTasksWithNotifications(c context.Cont
 }
 
 func (r *NotificationRepository) DeleteSentNotifications(c context.Context, since time.Time) error {
-	return r.db.WithContext(c).Where("is_sent = 1 AND scheduled_for < ?", since).Delete(&models.Notification{}).Error
+	return r.db.RW().WithContext(c).Where("is_sent = 1 AND scheduled_for < ?", since).Delete(&models.Notification{}).Error
 }

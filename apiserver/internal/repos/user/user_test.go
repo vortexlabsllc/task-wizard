@@ -29,7 +29,7 @@ func (s *UserTestSuite) SetupTest() {
 			Registration: true,
 		},
 	}
-	s.repo = NewUserRepository(s.DB, s.cfg)
+	s.repo = NewUserRepository(s.DBPool, s.cfg)
 }
 
 func (s *UserTestSuite) TestCreateUser() {

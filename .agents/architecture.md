@@ -8,7 +8,7 @@ Task Wizard is a self-hosted, privacy-focused task management application. It is
 - **Language**: Go
 - **Framework**: Gin (HTTP), WebSocket
 - **DI**: Uber FX
-- **Database**: SQLite (default) or MySQL via GORM
+- **Database**: PostgreSQL (default, first-class) or SQLite (local dev) via GORM. Supports up to three DSN-backed pools (primary RW, read R, read-only replica RO) with automatic fallback.
 - **Role**: The central backend. Handles all business logic, persistence, authentication, background scheduling, notifications, and serves the frontend as static files.
 
 ### 2. Frontend (`frontend/`)
@@ -41,8 +41,8 @@ Task Wizard is a self-hosted, privacy-focused task management application. It is
                                        │ GORM
 ┌───────────┐    HTTP REST             ▼
 │  Android  │ ──────────────────► ┌────────────┐
-│ (Kotlin)  │ ◄──── WebSocket ── │  SQLite /   │
-└───────────┘                    │  MySQL      │
+│ (Kotlin)  │ ◄──── WebSocket ── │  PostgreSQL │
+└───────────┘                    │  (or SQLite)│
                                  └────────────┘
 
 ┌───────────┐  MCP (HTTP)

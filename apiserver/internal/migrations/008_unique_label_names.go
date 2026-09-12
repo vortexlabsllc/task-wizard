@@ -24,67 +24,67 @@ func (m *UniqueLabelNamesMigration) Name() string {
 func (m *UniqueLabelNamesMigration) Up(ctx context.Context, db *gorm.DB) error {
 	dbCtx := db.WithContext(ctx)
 
-	dedup := []string{
-		// Reassign task_labels from duplicate labels to the kept (lowest ID) label,
-		// skipping rows that would collide with an existing (task_id, keep_id) pair
-		`INSERT OR IGNORE INTO task_labels (task_id, label_id)
-		SELECT tl.task_id, keep.id
-		FROM task_labels tl
-		JOIN labels dup ON tl.label_id = dup.id
-		JOIN (
-			SELECT MIN(id) AS id, name, created_by
-			FROM labels
-			GROUP BY created_by, name
-		) keep ON dup.created_by = keep.created_by AND dup.name = keep.name
-		WHERE dup.id != keep.id`,
-
-		// Remove task_labels pointing to duplicate labels
-		`DELETE FROM task_labels WHERE label_id IN (
-			SELECT l.id FROM labels l
-			JOIN (
-				SELECT MIN(id) AS keep_id, name, created_by
-				FROM labels
-				GROUP BY created_by, name
-			) k ON l.created_by = k.created_by AND l.name = k.name
-			WHERE l.id != k.keep_id
-		)`,
-
-		// Delete the duplicate labels themselves
-		`DELETE FROM labels WHERE id NOT IN (
-			SELECT MIN(id) FROM labels GROUP BY created_by, name
-		)`,
-	}
-
-	dialect := db.Name()
-	if dialect == "mysql" {
+	// Deduplicate labels per (created_by, name), keeping the lowest ID:
+	//  1. reassign task_labels from duplicate labels to the kept label,
+	//     skipping rows that would collide with an existing pair
+	//  2. remove task_labels pointing to duplicate labels
+	//  3. delete the duplicate labels themselves
+	var dedup []string
+	switch db.Name() {
+	case "postgres":
 		dedup = []string{
-			`INSERT IGNORE INTO task_labels (task_id, label_id)
-			SELECT tl.task_id, keep_tbl.keep_id
+			`INSERT INTO task_labels (task_id, label_id)
+			SELECT tl.task_id, keep.id
 			FROM task_labels tl
 			JOIN labels dup ON tl.label_id = dup.id
 			JOIN (
-				SELECT MIN(id) AS keep_id, name, created_by
+				SELECT MIN(id) AS id, name, created_by
 				FROM labels
 				GROUP BY created_by, name
-			) keep_tbl ON dup.created_by = keep_tbl.created_by AND dup.name = keep_tbl.name
-			WHERE dup.id != keep_tbl.keep_id`,
+			) keep ON dup.created_by = keep.created_by AND dup.name = keep.name
+			WHERE dup.id != keep.id
+			ON CONFLICT DO NOTHING`,
 
-			`DELETE tl FROM task_labels tl
-			JOIN labels l ON tl.label_id = l.id
-			JOIN (
-				SELECT MIN(id) AS keep_id, name, created_by
-				FROM labels
-				GROUP BY created_by, name
-			) k ON l.created_by = k.created_by AND l.name = k.name
-			WHERE l.id != k.keep_id`,
+			`DELETE FROM task_labels WHERE label_id IN (
+				SELECT l.id FROM labels l
+				JOIN (
+					SELECT MIN(id) AS keep_id, name, created_by
+					FROM labels
+					GROUP BY created_by, name
+				) k ON l.created_by = k.created_by AND l.name = k.name
+				WHERE l.id != k.keep_id
+			)`,
 
-			`DELETE l FROM labels l
+			`DELETE FROM labels WHERE id NOT IN (
+				SELECT MIN(id) FROM labels GROUP BY created_by, name
+			)`,
+		}
+	default: // sqlite
+		dedup = []string{
+			`INSERT OR IGNORE INTO task_labels (task_id, label_id)
+			SELECT tl.task_id, keep.id
+			FROM task_labels tl
+			JOIN labels dup ON tl.label_id = dup.id
 			JOIN (
-				SELECT MIN(id) AS keep_id, name, created_by
+				SELECT MIN(id) AS id, name, created_by
 				FROM labels
 				GROUP BY created_by, name
-			) k ON l.created_by = k.created_by AND l.name = k.name
-			WHERE l.id != k.keep_id`,
+			) keep ON dup.created_by = keep.created_by AND dup.name = keep.name
+			WHERE dup.id != keep.id`,
+
+			`DELETE FROM task_labels WHERE label_id IN (
+				SELECT l.id FROM labels l
+				JOIN (
+					SELECT MIN(id) AS keep_id, name, created_by
+					FROM labels
+					GROUP BY created_by, name
+				) k ON l.created_by = k.created_by AND l.name = k.name
+				WHERE l.id != k.keep_id
+			)`,
+
+			`DELETE FROM labels WHERE id NOT IN (
+				SELECT MIN(id) FROM labels GROUP BY created_by, name
+			)`,
 		}
 	}
 
@@ -98,11 +98,5 @@ func (m *UniqueLabelNamesMigration) Up(ctx context.Context, db *gorm.DB) error {
 }
 
 func (m *UniqueLabelNamesMigration) Down(ctx context.Context, db *gorm.DB) error {
-	dbCtx := db.WithContext(ctx)
-
-	if db.Name() == "mysql" {
-		return dbCtx.Exec("DROP INDEX idx_labels_created_by_name ON labels").Error
-	}
-
-	return dbCtx.Exec("DROP INDEX IF EXISTS idx_labels_created_by_name").Error
+	return db.WithContext(ctx).Exec("DROP INDEX IF EXISTS idx_labels_created_by_name").Error
 }

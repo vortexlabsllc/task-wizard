@@ -23,8 +23,6 @@ import (
 	utils "taskwiz.app/core/internal/utils/middleware"
 	ws "taskwiz.app/core/internal/ws"
 
-	"gorm.io/gorm"
-
 	apis "taskwiz.app/core/internal/apis"
 	lRepo "taskwiz.app/core/internal/repos/label"
 	nRepo "taskwiz.app/core/internal/repos/notifier"
@@ -67,7 +65,7 @@ func main() {
 
 		fx.Provide(auth.NewAuthMiddleware),
 
-		fx.Provide(database.NewDatabase),
+		fx.Provide(database.New),
 		fx.Provide(tRepo.NewTaskRepository),
 		fx.Provide(apis.TasksAPI),
 		fx.Provide(uRepo.NewUserRepository),
@@ -135,7 +133,7 @@ func timeoutOrDefault(configured, fallback time.Duration) time.Duration {
 	return configured
 }
 
-func newServer(lc fx.Lifecycle, cfg *config.Config, db *gorm.DB, bgScheduler *scheduler.Scheduler) *gin.Engine {
+func newServer(lc fx.Lifecycle, cfg *config.Config, db *database.DB, bgScheduler *scheduler.Scheduler) *gin.Engine {
 	if cfg.Server.LogLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -178,7 +176,7 @@ func newServer(lc fx.Lifecycle, cfg *config.Config, db *gorm.DB, bgScheduler *sc
 			logging.FromContext(ctx).Info("Starting server")
 
 			if cfg.Database.Migration {
-				runner := migrations.NewRunner(db)
+				runner := migrations.NewRunner(db.RW())
 				if err := runner.MigrateUp(ctx, 0); err != nil {
 					return fmt.Errorf("failed to run migrations: %s", err.Error())
 				}
@@ -198,6 +196,11 @@ func newServer(lc fx.Lifecycle, cfg *config.Config, db *gorm.DB, bgScheduler *sc
 		OnStop: func(ctx context.Context) error {
 			bgScheduler.Stop()
 			telemetry.FlushAppInsights()
+
+			if err := db.Close(); err != nil {
+				log := logging.FromContext(ctx)
+				log.Errorf("closing database pools: %s", err.Error())
+			}
 
 			if err := srv.Shutdown(ctx); err != nil {
 				log := logging.FromContext(ctx)
