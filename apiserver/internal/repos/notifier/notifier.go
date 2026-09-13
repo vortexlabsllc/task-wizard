@@ -127,7 +127,7 @@ func (r *NotificationRepository) MarkNotificationsAsSent(notifications []*models
 func (r *NotificationRepository) GetPendingNotification(c context.Context, lookback time.Duration) ([]*models.Notification, error) {
 	var notifications []*models.Notification
 	cutoff := time.Now()
-	if err := r.db.RO().Where("is_sent = 0 AND scheduled_for < ?", cutoff).Preload("User.NotificationSettings").Find(&notifications).Error; err != nil {
+	if err := r.db.RO().Where("is_sent = ? AND scheduled_for < ?", false, cutoff).Preload("User.NotificationSettings").Find(&notifications).Error; err != nil {
 		return nil, err
 	}
 	return notifications, nil
@@ -135,7 +135,7 @@ func (r *NotificationRepository) GetPendingNotification(c context.Context, lookb
 
 func (r *NotificationRepository) GetOverdueTasksWithNotifications(c context.Context, now time.Time) ([]*models.Task, error) {
 	var tasks []*models.Task
-	if err := r.db.RO().WithContext(c).Where("is_active = 1 AND next_due_date <= ? AND notification_overdue = 1", now).Select("id, created_by, title").Find(&tasks).Error; err != nil {
+	if err := r.db.RO().WithContext(c).Where("is_active = ? AND next_due_date <= ? AND notification_overdue = ?", true, now, true).Select("id, created_by, title").Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 
@@ -143,5 +143,5 @@ func (r *NotificationRepository) GetOverdueTasksWithNotifications(c context.Cont
 }
 
 func (r *NotificationRepository) DeleteSentNotifications(c context.Context, since time.Time) error {
-	return r.db.RW().WithContext(c).Where("is_sent = 1 AND scheduled_for < ?", since).Delete(&models.Notification{}).Error
+	return r.db.RW().WithContext(c).Where("is_sent = ? AND scheduled_for < ?", true, since).Delete(&models.Notification{}).Error
 }
