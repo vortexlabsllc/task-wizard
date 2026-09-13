@@ -50,7 +50,7 @@ func (r *TaskRepository) GetTasks(c context.Context, userID int) ([]*models.Task
 	var tasks []*models.Task
 
 	if err := r.db.R().WithContext(c).
-		Where("created_by = ? AND is_active = 1", userID).
+		Where("created_by = ? AND is_active = ?", userID, true).
 		Order("next_due_date ASC").
 		Preload("Labels").
 		Find(&tasks).Error; err != nil {
@@ -64,7 +64,7 @@ func (r *TaskRepository) GetTasksDueBefore(c context.Context, userID int, before
 	var tasks []*models.Task
 
 	if err := r.db.R().WithContext(c).
-		Where("created_by = ? AND is_active = 1 AND next_due_date < ?", userID, before).
+		Where("created_by = ? AND is_active = ? AND next_due_date < ?", userID, true, before).
 		Order("next_due_date ASC").
 		Preload("Labels").
 		Find(&tasks).Error; err != nil {
@@ -78,7 +78,7 @@ func (r *TaskRepository) GetTasksByLabel(c context.Context, userID int, labelID 
 	var tasks []*models.Task
 
 	if err := r.db.R().WithContext(c).
-		Where("created_by = ? AND is_active = 1", userID).
+		Where("created_by = ? AND is_active = ?", userID, true).
 		Joins("JOIN task_labels ON task_labels.task_id = tasks.id AND task_labels.label_id = ?", labelID).
 		Order("next_due_date ASC").
 		Preload("Labels").
@@ -101,7 +101,7 @@ func (r *TaskRepository) SearchTasksByTitle(c context.Context, userID int, query
 	pattern := "%" + strings.ToLower(escaped) + "%"
 
 	if err := r.db.RO().WithContext(c).
-		Where("created_by = ? AND is_active = 1 AND LOWER(title) LIKE ? ESCAPE '!'", userID, pattern).
+		Where("created_by = ? AND is_active = ? AND LOWER(title) LIKE ? ESCAPE '!'", userID, true, pattern).
 		Order("next_due_date ASC").
 		Preload("Labels").
 		Find(&tasks).Error; err != nil {
