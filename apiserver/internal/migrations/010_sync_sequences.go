@@ -32,14 +32,38 @@ func (m *SyncSequencesMigration) Up(ctx context.Context, db *gorm.DB) error {
 
 	switch db.Name() {
 	case "postgres":
-		// For every owned sequence, advance it past the current maximum of
-		// its column so future nextval() calls cannot collide with existing rows.
+		// For every sequence that is owned by a table column (serial / identity
+		// columns), advance it past the current maximum of that column so future
+		// nextval() calls cannot collide with existing rows.
+		//
+		// The sequence -> (schema, table, column) mapping is derived from the
+		// system catalogs rather than pg_sequences, because pg_sequences is not
+		// universally available across PostgreSQL versions. The owning column is
+		// recorded as an auto-dependency (deptype 'a') in pg_depend: objid is the
+		// sequence, refobjid the table, refobjsubid the column's attnum.
+		//
+		// Identifiers are formatted with %I (which double-quotes them) so schema,
+		// table, sequence and column names with unusual casing or characters are
+		// handled safely; the max() is taken from the owning table.
 		stmt := `
-			SELECT format('SELECT setval(%L, COALESCE(MAX(%I), 1), MAX(%I) IS NOT NULL)',
-				quote_nspconcat(schemaname) || '.' || sequencename,
-				column_name, column_name)
-			FROM pg_sequences
-			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')`
+			SELECT format(
+				'SELECT setval(''%I.%I'', COALESCE(MAX(%I), 1), MAX(%I) IS NOT NULL) FROM %I.%I',
+				n.nspname, c.relname,
+				a.attname, a.attname,
+				tn.nspname, t.relname)
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN pg_depend d
+				ON d.objid = c.oid
+				AND d.classid = 'pg_class'::regclass
+				AND d.deptype = 'a'
+			JOIN pg_class t ON t.oid = d.refobjid
+			JOIN pg_namespace tn ON tn.oid = t.relnamespace
+			JOIN pg_attribute a
+				ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
+			WHERE c.relkind = 'S'
+			  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+			  AND a.attisdropped = false`
 
 		var setvals []string
 		if err := dbCtx.Raw(stmt).Scan(&setvals).Error; err != nil {
