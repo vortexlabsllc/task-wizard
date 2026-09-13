@@ -222,8 +222,12 @@ class AuthManager @Inject constructor(
                 put(JSONObject().apply {
                     put("type", "AAD")
                     put("audience", JSONObject().apply {
-                        put("type", "AzureADMyOrg")
-                        put("tenant_id", authConfig.tenantId)
+                        if (authConfig.tenantId.isNullOrBlank()) {
+                            put("type", "AzureADandPersonalMicrosoftAccount")
+                        } else {
+                            put("type", "AzureADMyOrg")
+                            put("tenant_id", authConfig.tenantId)
+                        }
                     })
                 })
             })

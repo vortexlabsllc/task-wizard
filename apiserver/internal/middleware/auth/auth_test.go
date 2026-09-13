@@ -109,3 +109,39 @@ func TestValidateTemporalClaims_NotBeforeAbsent_Valid(t *testing.T) {
 
 	assert.NoError(t, validateTemporalClaims(claims, now, clockSkewLeeway))
 }
+
+func TestAuthMiddlewareValidIssuer(t *testing.T) {
+	const tenantID = "9188040d-6c67-4c5b-b112-36a304b66dad"
+
+	t.Run("accepts a tenant-specific issuer in multi-tenant mode", func(t *testing.T) {
+		middleware := &AuthMiddleware{multiTenant: true}
+		claims := accessTokenClaims{
+			Issuer:   entraLoginURL + tenantID + "/v2.0",
+			TenantID: tenantID,
+		}
+
+		assert.True(t, middleware.validIssuer(claims))
+	})
+
+	t.Run("rejects an issuer that does not match the token tenant", func(t *testing.T) {
+		middleware := &AuthMiddleware{multiTenant: true}
+		claims := accessTokenClaims{
+			Issuer:   entraLoginURL + "other-tenant/v2.0",
+			TenantID: tenantID,
+		}
+
+		assert.False(t, middleware.validIssuer(claims))
+	})
+
+	t.Run("requires the configured issuer in single-tenant mode", func(t *testing.T) {
+		middleware := &AuthMiddleware{
+			issuer: entraLoginURL + "configured-tenant/v2.0",
+		}
+		claims := accessTokenClaims{
+			Issuer:   entraLoginURL + tenantID + "/v2.0",
+			TenantID: tenantID,
+		}
+
+		assert.False(t, middleware.validIssuer(claims))
+	})
+}
