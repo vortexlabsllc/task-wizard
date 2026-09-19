@@ -228,11 +228,11 @@ class TaskEditImpl extends React.Component<TaskEditProps, TaskEditState> {
 
     moveFocusToJoyInput(this.titleInputRef)
 
-    document.addEventListener('keydown', this.onKeyDown)
+    document.addEventListener('keydown', this.onEscapeKey)
   }
 
   componentWillUnmount(): void {
-    document.removeEventListener('keydown', this.onKeyDown)
+    document.removeEventListener('keydown', this.onEscapeKey)
   }
 
   private isOverlayOpen = (): boolean => {
@@ -259,7 +259,7 @@ class TaskEditImpl extends React.Component<TaskEditProps, TaskEditState> {
     return false
   }
 
-  private onKeyDown = (e: KeyboardEvent) => {
+  private onEscapeKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || e.defaultPrevented) {
       return
     }
@@ -269,7 +269,7 @@ class TaskEditImpl extends React.Component<TaskEditProps, TaskEditState> {
     }
 
     e.preventDefault()
-    this.onCancelClicked()
+    this.navigateAway()
   }
 
   private onTitleChanged = (e: ChangeEvent<HTMLInputElement>) => {
