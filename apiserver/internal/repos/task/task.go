@@ -173,8 +173,14 @@ func (r *TaskRepository) CompleteTask(c context.Context, task *models.Task, user
 // no longer the most recent action for the task.
 var ErrActivityNotLatest = errors.New("history entry is not the latest action for the task")
 
-func (r *TaskRepository) RevertActivity(c context.Context, taskID int, historyID int) error {
-	return r.db.RW().WithContext(c).Transaction(func(tx *gorm.DB) error {
+// RevertActivity reverts the given (or latest) history entry for a task and
+// returns the due date that was restored onto the task. Returning the restored
+// due date lets callers rebuild the post-write task state in memory without an
+// extra read, which would otherwise hit the read replica and risk a stale
+// snapshot.
+func (r *TaskRepository) RevertActivity(c context.Context, taskID int, historyID int) (*time.Time, error) {
+	var restoredDueDate *time.Time
+	err := r.db.RW().WithContext(c).Transaction(func(tx *gorm.DB) error {
 		var latestID *int
 		if err := tx.Model(&models.TaskHistory{}).
 			Where("task_id = ?", taskID).
@@ -211,8 +217,14 @@ func (r *TaskRepository) RevertActivity(c context.Context, taskID int, historyID
 			"is_active":     true,
 		}
 
+		restoredDueDate = entry.DueDate
+
 		return tx.Model(&models.Task{}).Where("id = ?", taskID).Updates(updates).Error
 	})
+	if err != nil {
+		return nil, err
+	}
+	return restoredDueDate, nil
 }
 
 func (r *TaskRepository) GetTaskHistory(c context.Context, taskID int) ([]*models.TaskHistory, error) {

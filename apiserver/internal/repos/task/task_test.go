@@ -384,8 +384,11 @@ func (s *TaskTestSuite) TestRevertActivity() {
 	err = s.DB.Where("task_id = ?", task.ID).First(&history).Error
 	s.Require().NoError(err)
 
-	err = s.repo.RevertActivity(ctx, task.ID, history.ID)
+	restoredDueDate, err := s.repo.RevertActivity(ctx, task.ID, history.ID)
 	s.Require().NoError(err)
+	if restoredDueDate != nil {
+		s.WithinDuration(dueDate, *restoredDueDate, time.Second)
+	}
 
 	var updatedTask models.Task
 	err = s.DB.First(&updatedTask, task.ID).Error
@@ -429,7 +432,7 @@ func (s *TaskTestSuite) TestRevertActivityRejectsStaleEntry() {
 	err = s.repo.CompleteTask(ctx, task, s.testUser.ID, &laterDueDate, &completedDate)
 	s.Require().NoError(err)
 
-	err = s.repo.RevertActivity(ctx, task.ID, firstHistory.ID)
+	_, err = s.repo.RevertActivity(ctx, task.ID, firstHistory.ID)
 	s.Require().ErrorIs(err, ErrActivityNotLatest)
 
 	// Both history rows remain.
@@ -465,7 +468,7 @@ func (s *TaskTestSuite) TestRevertActivityDefaultsToLatest() {
 	s.Require().NoError(err)
 
 	// A non-positive history id reverts the most recent action.
-	err = s.repo.RevertActivity(ctx, task.ID, 0)
+	_, err = s.repo.RevertActivity(ctx, task.ID, 0)
 	s.Require().NoError(err)
 
 	var count int64
@@ -485,7 +488,7 @@ func (s *TaskTestSuite) TestRevertActivityNoHistory() {
 	err := s.DB.Create(task).Error
 	s.Require().NoError(err)
 
-	err = s.repo.RevertActivity(ctx, task.ID, 0)
+	_, err = s.repo.RevertActivity(ctx, task.ID, 0)
 	s.Require().ErrorIs(err, gorm.ErrRecordNotFound)
 }
 
@@ -510,7 +513,7 @@ func (s *TaskTestSuite) TestRevertActivityRejectsWrongTask() {
 	s.Require().NoError(err)
 
 	// The history id does not belong to task id 99999.
-	err = s.repo.RevertActivity(ctx, 99999, history.ID)
+	_, err = s.repo.RevertActivity(ctx, 99999, history.ID)
 	s.Require().Error(err)
 }
 
