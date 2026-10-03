@@ -67,8 +67,16 @@ class SyncCoordinator @Inject constructor(
         activeFullJob = scope.launch {
             mutex.withLock {
                 try {
-                    flushOutbox()
-                    refreshAll()
+                    val flushed = flushOutbox()
+                    // When this cycle applied local writes, do not immediately
+                    // re-read from the read replica: that read can lag behind the
+                    // writes we just sent and would undo them (e.g. re-show a task
+                    // that was just completed). Convergence for remote changes is
+                    // handled by WebSocket events and by later periodic cycles that
+                    // have no local writes to flush.
+                    if (!flushed) {
+                        refreshAll()
+                    }
                 } catch (e: Exception) {
                     telemetryManager.logError(TAG, "Sync cycle failed: ${e.message}", e)
                 }
@@ -86,8 +94,12 @@ class SyncCoordinator @Inject constructor(
         val job = scope.launch {
             mutex.withLock {
                 try {
-                    flushOutbox()
-                    refreshAll()
+                    val flushed = flushOutbox()
+                    // Skip the immediate replica re-read when we just applied local
+                    // writes (see syncOnce for why a post-write read is unsafe).
+                    if (!flushed) {
+                        refreshAll()
+                    }
                     success = true
                 } catch (e: Exception) {
                     telemetryManager.logError(TAG, "Sync cycle failed: ${e.message}", e)
@@ -137,20 +149,22 @@ class SyncCoordinator @Inject constructor(
         }
     }
 
-    private suspend fun flushOutbox() {
+    private suspend fun flushOutbox(): Boolean {
+        var processedAny = false
         while (true) {
-            val op = outboxDao.peekNext() ?: return
+            val op = outboxDao.peekNext() ?: return processedAny
             val ok = try {
                 processOp(op)
             } catch (e: Exception) {
                 telemetryManager.logError(TAG, "Outbox op ${op.opType} ${op.entityType} failed: ${e.message}", e)
                 outboxDao.update(op.copy(attempts = op.attempts + 1, lastError = e.message))
-                return
+                return processedAny
             }
             if (!ok) {
                 // Non-retriable failure already recorded; stop to avoid blocking forever.
-                return
+                return processedAny
             }
+            processedAny = true
         }
     }
 

@@ -414,27 +414,25 @@ func (s *TaskService) SkipTask(ctx context.Context, userID, taskID int) (int, in
 		}
 	}
 
-	updatedTask, err := s.t.GetTask(ctx, taskID)
-	if err != nil {
-		log.Errorf("error getting updated task: %s", err.Error())
-		telemetry.TrackError(ctx, "task_get_failed", "task-service", err, nil)
-		return http.StatusInternalServerError, gin.H{
-			"error": "Error getting updated task",
-		}
+	// Rebuild the post-write task in memory instead of re-reading it (see
+	// CompleteTask for why a post-write read is unsafe on a read replica).
+	task.NextDueDate = nextDueDate
+	if nextDueDate == nil {
+		task.IsActive = false
 	}
 
 	go func(task *models.Task, logger *zap.SugaredLogger) {
 		ctx := logging.ContextWithLogger(context.Background(), logger)
 		s.n.GenerateNotifications(ctx, task)
-	}(updatedTask, log)
+	}(task, log)
 
 	s.ws.BroadcastToUser(userID, ws.WSResponse{
 		Action: "task_skipped",
-		Data:   updatedTask,
+		Data:   task,
 	})
 
 	return http.StatusOK, gin.H{
-		"task": updatedTask,
+		"task": task,
 	}
 }
 
@@ -537,27 +535,26 @@ func (s *TaskService) CompleteTask(ctx context.Context, userID, taskID int, endR
 		}
 	}
 
-	updatedTask, err := s.t.GetTask(ctx, taskID)
-	if err != nil {
-		log.Errorf("error getting updated task: %s", err.Error())
-		telemetry.TrackError(ctx, "task_get_failed", "task-service", err, nil)
-		return http.StatusInternalServerError, gin.H{
-			"error": "Error getting updated task",
-		}
+	// Rebuild the post-write task in memory instead of re-reading it. A read
+	// here would hit the read replica and could return a stale snapshot that
+	// makes a just-applied completion appear to be undone.
+	task.NextDueDate = nextDueDate
+	if nextDueDate == nil {
+		task.IsActive = false
 	}
 
 	go func(task *models.Task, logger *zap.SugaredLogger) {
 		ctx := logging.ContextWithLogger(context.Background(), logger)
 		s.n.GenerateNotifications(ctx, task)
-	}(updatedTask, log)
+	}(task, log)
 
 	s.ws.BroadcastToUser(userID, ws.WSResponse{
 		Action: "task_completed",
-		Data:   updatedTask,
+		Data:   task,
 	})
 
 	return http.StatusOK, gin.H{
-		"task": updatedTask,
+		"task": task,
 	}
 }
 
@@ -580,7 +577,8 @@ func (s *TaskService) RevertAction(ctx context.Context, userID, taskID, historyI
 		return http.StatusNotFound, gin.H{"error": "Task not found"}
 	}
 
-	if err := s.t.RevertActivity(ctx, taskID, historyID); err != nil {
+	restoredDueDate, err := s.t.RevertActivity(ctx, taskID, historyID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, tRepo.ErrActivityNotLatest) {
 			return http.StatusConflict, gin.H{
 				"error": "This action can no longer be reverted",
@@ -594,27 +592,23 @@ func (s *TaskService) RevertAction(ctx context.Context, userID, taskID, historyI
 		}
 	}
 
-	updatedTask, err := s.t.GetTask(ctx, taskID)
-	if err != nil {
-		log.Errorf("error getting updated task: %s", err.Error())
-		telemetry.TrackError(ctx, "task_get_failed", "task-service", err, nil)
-		return http.StatusInternalServerError, gin.H{
-			"error": "Error getting updated task",
-		}
-	}
+	// Rebuild the post-write task in memory instead of re-reading it (see
+	// CompleteTask for why a post-write read is unsafe on a read replica).
+	task.NextDueDate = restoredDueDate
+	task.IsActive = true
 
 	go func(task *models.Task, logger *zap.SugaredLogger) {
 		ctx := logging.ContextWithLogger(context.Background(), logger)
 		s.n.GenerateNotifications(ctx, task)
-	}(updatedTask, log)
+	}(task, log)
 
 	s.ws.BroadcastToUser(userID, ws.WSResponse{
 		Action: "task_uncompleted",
-		Data:   updatedTask,
+		Data:   task,
 	})
 
 	return http.StatusOK, gin.H{
-		"task": updatedTask,
+		"task": task,
 	}
 }
 

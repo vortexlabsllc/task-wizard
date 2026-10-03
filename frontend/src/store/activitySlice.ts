@@ -46,16 +46,12 @@ export const revertAction = createAsyncThunk(
   'activity/revertAction',
   async (
     { taskId, historyId }: { taskId: number; historyId: number },
-    thunkAPI,
   ) => {
+    // Trust the write signal only. Over WebSocket the server broadcasts
+    // task_uncompleted and the feed refreshes via the listener; over plain HTTP
+    // the tasks slice already reflects the change optimistically, so there is no
+    // need to re-read the (read-replica-backed) activity feed here.
     await UncompleteTask(taskId, historyId)
-
-    // When connected over WebSocket, the server broadcasts task_uncompleted and
-    // the feed refreshes via the listener. Over plain HTTP there is no such
-    // event, so refresh here to reflect the revert.
-    if (!WebSocketManager.getInstance().isConnected()) {
-      await thunkAPI.dispatch(fetchActivity())
-    }
   },
 )
 
