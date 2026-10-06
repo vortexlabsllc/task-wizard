@@ -13,6 +13,22 @@ let redirectingToLogin = false
 
 export const isRedirectingToLogin = () => redirectingToLogin
 
+/**
+ * Guards against an endless app -> /login -> app -> /login bounce when the
+ * server keeps returning 401 (e.g. a persistently bad token). Once we have
+ * bounced to the login page within the last few seconds, further 401s should
+ * surface as errors instead of forcing another full-page redirect.
+ */
+const LOGIN_REDIRECT_COOLDOWN_MS = 10_000
+let lastLoginRedirectAt = 0
+
+export const markLoginRedirect = (): void => {
+  lastLoginRedirectAt = Date.now()
+}
+
+export const isWithinLoginRedirectCooldown = (): boolean =>
+  Date.now() - lastLoginRedirectAt < LOGIN_REDIRECT_COOLDOWN_MS
+
 export async function Request<SuccessfulResponse>(
   url: string,
   method: RequestMethod = 'GET',
@@ -51,8 +67,9 @@ export async function Request<SuccessfulResponse>(
   const response: Response = await fetch(fullURL, options)
 
   if (response.status === 401) {
-    if (!redirectingToLogin) {
+    if (!redirectingToLogin && !isWithinLoginRedirectCooldown()) {
       redirectingToLogin = true
+      markLoginRedirect()
       const returnTo = encodeURIComponent(window.location.pathname)
       window.location.href = `${NavigationPaths.Login}?return_to=${returnTo}`
     }

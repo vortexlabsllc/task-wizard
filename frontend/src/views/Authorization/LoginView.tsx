@@ -12,6 +12,7 @@ import { initializeMsal, isAuthEnabled, loginWithRedirect, acquireAccessToken } 
 import { CreateSession } from '@/api/auth'
 import { setTitle } from '@/utils/dom'
 import { getQuery, NavigationPaths, WithNavigate } from '@/utils/navigation'
+import { markLoginRedirect } from '@/utils/api'
 import { connect } from 'react-redux'
 import { AppDispatch } from '@/store/store'
 import { pushStatus } from '@/store/statusSlice'
@@ -54,14 +55,18 @@ class LoginViewImpl extends React.Component<LoginViewProps, LoginViewState> {
           this.props.navigate(this.getReturnPath())
           return
         }
-      } catch {
-        // No cached MSAL tokens; show sign-in button
+      } catch (error) {
+        // No cached MSAL tokens; show sign-in button.
+        console.error('Login: could not acquire token without interaction', error)
       }
     }
   }
 
   private handleLogin = async () => {
     try {
+      // Remember this bounce so a rapid follow-up 401 doesn't force another
+      // full-page redirect into a loop.
+      markLoginRedirect()
       await loginWithRedirect()
     } catch (error) {
       this.props.pushStatus((error as Error).message, 'error', 5000)
