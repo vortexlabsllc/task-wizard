@@ -111,8 +111,9 @@ class AppImpl extends React.Component<AppProps, AppState> {
               // Session creation is best-effort
             }
           }
-        } catch {
-          // No MSAL tokens; will rely on session cookie
+        } catch (error) {
+          // No MSAL tokens; will rely on session cookie.
+          console.error('App: could not acquire token without interaction', error)
         }
       }
 
