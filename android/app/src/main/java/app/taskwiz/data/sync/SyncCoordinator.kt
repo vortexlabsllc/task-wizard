@@ -156,12 +156,16 @@ class SyncCoordinator @Inject constructor(
             val ok = try {
                 processOp(op)
             } catch (e: Exception) {
+                // Transient failure (network, timeout): record and stop this cycle; the next
+                // sync cycle retries from the top. We do not delete the row.
                 telemetryManager.logError(TAG, "Outbox op ${op.opType} ${op.entityType} failed: ${e.message}", e)
                 outboxDao.update(op.copy(attempts = op.attempts + 1, lastError = e.message))
                 return processedAny
             }
             if (!ok) {
-                // Non-retriable failure already recorded; stop to avoid blocking forever.
+                // A retriable-but-not-yet-ready condition (e.g. awaiting a preceding CREATE or a
+                // pending label). Stop this cycle; it will be revisited on the next one. The row is
+                // left in place on purpose.
                 return processedAny
             }
             processedAny = true
@@ -245,6 +249,12 @@ class SyncCoordinator @Inject constructor(
                 )
                 val response = api.updateTask(payload)
                 if (!response.isSuccessful) {
+                    if (response.code() == 404) {
+                        // Task no longer exists server-side; our local edit is stale.
+                        discardStaleTaskOp(op, id, "HTTP 404")
+                        outboxDao.deleteById(op.id)
+                        return true
+                    }
                     recordFailure(op, "HTTP ${response.code()}")
                     return false
                 }
@@ -271,6 +281,11 @@ class SyncCoordinator @Inject constructor(
                 val endRecurrence = op.payloadJson?.toBooleanStrictOrNull() ?: false
                 val response = api.completeTask(id, endRecurrence)
                 if (!response.isSuccessful) {
+                    if (response.code() == 404) {
+                        discardStaleTaskOp(op, id, "HTTP 404")
+                        outboxDao.deleteById(op.id)
+                        return true
+                    }
                     taskDao.setState(id, LocalState.PENDING_UPDATE)
                     recordFailure(op, "HTTP ${response.code()}")
                     return false
@@ -292,6 +307,11 @@ class SyncCoordinator @Inject constructor(
                 }
                 val response = api.skipTask(id)
                 if (!response.isSuccessful) {
+                    if (response.code() == 404) {
+                        discardStaleTaskOp(op, id, "HTTP 404")
+                        outboxDao.deleteById(op.id)
+                        return true
+                    }
                     taskDao.setState(id, LocalState.PENDING_UPDATE)
                     recordFailure(op, "HTTP ${response.code()}")
                     return false
@@ -314,6 +334,11 @@ class SyncCoordinator @Inject constructor(
                 val dueDate = op.payloadJson ?: return consume(op)
                 val response = api.updateDueDate(id, UpdateDueDateReq(dueDate))
                 if (!response.isSuccessful) {
+                    if (response.code() == 404) {
+                        discardStaleTaskOp(op, id, "HTTP 404")
+                        outboxDao.deleteById(op.id)
+                        return true
+                    }
                     recordFailure(op, "HTTP ${response.code()}")
                     return false
                 }
@@ -394,6 +419,21 @@ class SyncCoordinator @Inject constructor(
     private suspend fun recordFailure(op: OutboxEntity, message: String) {
         outboxDao.update(op.copy(attempts = op.attempts + 1, lastError = message))
         telemetryManager.logWarning(TAG, "Outbox op ${op.opType} ${op.entityType} id=${op.id}: $message")
+    }
+
+    /**
+     * Resolves an op whose target task no longer exists on the server (HTTP 404). The local edit
+     * is stale, so we stop trying to push it and reconcile the local row to server state. The
+     * caller removes the outbox row; [refreshAll] (run on the next cycle with no pending writes)
+     * then deletes the orphaned local task because it is absent from the server snapshot and no
+     * longer dirty.
+     */
+    private suspend fun discardStaleTaskOp(op: OutboxEntity, taskId: Int, reason: String) {
+        taskDao.getTaskById(taskId)?.let { taskDao.setState(taskId, LocalState.SYNCED) }
+        telemetryManager.logWarning(
+            TAG,
+            "Dropping stale ${op.opType} for task $taskId ($reason); will reconcile from server",
+        )
     }
 
     private suspend fun refreshAll(requireSuccessfulFetch: Boolean = false) {
