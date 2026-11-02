@@ -49,13 +49,13 @@
     "identity-obj-proxy": "^3.0.0",
     "jest": "^30.2.0",
     "jest-environment-jsdom": "^30.2.0",
-    "postcss": "^8.5.26",
+    "postcss": "^8.5.27",
     "prettier": "^3.4.2",
     "prettier-plugin-organize-imports": "^4.1.0",
     "prettier-plugin-react": "^0.0.1",
     "ts-jest": "^29.4.4",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.19.1",
-    "vite": "^6.4.3"
+    "vite": "^6.4.5"
   }
 }
